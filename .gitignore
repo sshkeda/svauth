@@ -1,0 +1,21 @@
+# Misc
+.DS_Store
+.eslintcache
+.env
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+.pnpm-debug.log
+
+# Dependencies
+node_modules
+
+# Build dirs
+build
+dist
+package
+
+# Turborepo
+.turbo
+
+# SvelteKit
+.svelte-kit
