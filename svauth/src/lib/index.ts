@@ -33,15 +33,23 @@ interface SvauthOptions {
 	providers?: Provider[];
 	redirects?: {
 		signIn?: string;
+		signOut?: string;
 	};
 }
 
-const schema = z.object({
-	action: z.literal('signIn'),
-	body: z.object({
-		providerId: z.string()
+const schema = z
+	.object({
+		action: z.literal('signIn'),
+		body: z.object({
+			providerId: z.string()
+		})
 	})
-});
+	.or(
+		z.object({
+			action: z.literal('signOut'),
+			body: z.object({}).default({})
+		})
+	);
 
 const tokenSchema = z.object({
 	access_token: z.string(),
@@ -77,6 +85,13 @@ const Svauth = (options?: SvauthOptions): Handle =>
 
 						return text(authorization_endpoint.toString());
 					}
+				} else if (action === 'signOut') {
+					event.cookies.delete('SVAUTH_SESSION');
+					return new Response(options?.redirects?.signOut || '/', {
+						headers: {
+							'Set-Cookie': 'SVAUTH_SESSION=; Path=/; Max-Age=0'
+						}
+					});
 				}
 			} else if (event.request.method === 'GET') {
 				const path = event.url.pathname.split('/');
@@ -120,10 +135,10 @@ const Svauth = (options?: SvauthOptions): Handle =>
 						const maxAge = 60 * 60 * 24 * 30; // 30 days
 						const encodedToken = jwt.sign(decodedToken, SVAUTH_SECRET);
 
-						return new Response('success', {
+						return new Response('signIn', {
 							status: 301,
 							headers: {
-								Location: options?.redirects?.signIn || '/',
+								Location: options?.redirects?.signIn || `${base}/`,
 								'Set-Cookie': `SVAUTH_SESSION=${encodedToken}; Max-Age=${maxAge}; SameSite=Strict; Path=/;`
 							}
 						});
