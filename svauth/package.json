@@ -1,6 +1,6 @@
 {
 	"name": "svauth",
-	"version": "0.0.1",
+	"version": "0.1.0",
 	"scripts": {
 		"dev": "svelte-package -w",
 		"build": "vite build && npm run package",
@@ -16,33 +16,57 @@
 		".": {
 			"types": "./dist/index.d.ts",
 			"default": "./dist/index.js"
+		},
+		"./client": {
+			"types": "./dist/client.d.ts",
+			"default": "./dist/client.js"
+		},
+		"./providers": {
+			"types": "./dist/providers.d.ts",
+			"default": "./dist/providers.js"
+		}
+	},
+	"typesVersions": {
+		">4.0": {
+			"client": [
+				"./dist/client.d.ts"
+			],
+			"providers": [
+				"./dist/providers.d.ts"
+			]
 		}
 	},
 	"files": [
 		"dist"
 	],
 	"peerDependencies": {
+		"@sveltejs/kit": "^1.15.1",
 		"svelte": "^3.54.0"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^2.0.0",
-		"@sveltejs/kit": "^1.5.0",
-		"@sveltejs/package": "^2.0.0",
-		"@typescript-eslint/eslint-plugin": "^5.45.0",
-		"@typescript-eslint/parser": "^5.45.0",
-		"eslint": "^8.28.0",
-		"eslint-config-prettier": "^8.5.0",
+		"@sveltejs/package": "^2.0.2",
+		"@types/jsonwebtoken": "^9.0.1",
+		"@types/node": "^18.15.11",
+		"@typescript-eslint/eslint-plugin": "^5.57.1",
+		"@typescript-eslint/parser": "^5.57.1",
+		"eslint": "^8.37.0",
+		"eslint-config-prettier": "^8.8.0",
 		"eslint-plugin-svelte3": "^4.0.0",
-		"prettier": "^2.8.0",
-		"prettier-plugin-svelte": "^2.8.1",
-		"publint": "^0.1.9",
-		"svelte": "^3.54.0",
-		"svelte-check": "^3.0.1",
-		"tslib": "^2.4.1",
-		"typescript": "^5.0.0",
-		"vite": "^4.2.0"
+		"prettier": "^2.8.7",
+		"prettier-plugin-svelte": "^2.10.0",
+		"publint": "^0.1.11",
+		"svelte": "^3.58.0",
+		"svelte-check": "^3.2.0",
+		"tslib": "^2.5.0",
+		"typescript": "^5.0.3",
+		"vite": "^4.2.1"
 	},
 	"svelte": "./dist/index.js",
 	"types": "./dist/index.d.ts",
-	"type": "module"
+	"type": "module",
+	"dependencies": {
+		"jsonwebtoken": "^9.0.0",
+		"zod": "^3.21.4"
+	}
 }
