@@ -59,6 +59,15 @@ const tokenSchema = z.object({
 	id_token: z.string()
 });
 
+const getSession = (sessionCookie: string | undefined) => {
+	if (!sessionCookie) return undefined;
+	try {
+		return jwt.verify(sessionCookie, SVAUTH_SECRET) as jwt.JwtPayload;
+	} catch (error) {
+		return null;
+	}
+};
+
 const Svauth = (options?: SvauthOptions): Handle =>
 	(async ({ event, resolve }) => {
 		if (event.url.pathname.startsWith(SVAUTH_PREFIX)) {
@@ -87,6 +96,7 @@ const Svauth = (options?: SvauthOptions): Handle =>
 					}
 				} else if (action === 'signOut') {
 					event.cookies.delete('SVAUTH_SESSION');
+
 					return new Response(options?.redirects?.signOut || '/', {
 						headers: {
 							'Set-Cookie': 'SVAUTH_SESSION=; Path=/; Max-Age=0'
@@ -148,8 +158,18 @@ const Svauth = (options?: SvauthOptions): Handle =>
 			return new Response();
 		}
 
+		event.locals.getSession = () => getSession(event.cookies.get('SVAUTH_SESSION'));
 		const response = await resolve(event);
 		return response;
 	}) satisfies Handle;
+
+declare global {
+	// eslint-disable-next-line @typescript-eslint/no-namespace
+	namespace App {
+		interface Locals {
+			getSession(): jwt.JwtPayload | undefined | null;
+		}
+	}
+}
 
 export default Svauth;

@@ -9,8 +9,5 @@
 		}
 	},
 	"idToken": true,
-	"checks": [
-		"pkce",
-		"state"
-	]
+	"checks": ["pkce", "state"]
 }
