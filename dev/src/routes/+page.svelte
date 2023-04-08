@@ -4,8 +4,6 @@
 	export let data;
 
 	$: ({ session } = data);
-
-	$: console.log(session);
 </script>
 
 <h1>Welcome to Svauth's Development SvelteKit Playground</h1>

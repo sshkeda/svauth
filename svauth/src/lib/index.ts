@@ -206,6 +206,10 @@ const Svauth = (options: SvauthOptions): Handle => {
 			try {
 				const unparsedSession = jwt.verify(sessionCookie, SVAUTH_SECRET);
 				const session = sessionSchema.parse(unparsedSession);
+				if (session.expires.getTime() < new Date().getTime()) {
+					event.cookies.delete('SVAUTH_SESSION');
+					return null;
+				}
 				const newExpiryDate = new Date().getTime() + maxAge;
 				session.expires = new Date(newExpiryDate);
 				const encodedToken = jwt.sign(
