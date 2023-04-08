@@ -42,10 +42,17 @@ const tokenSchema = z.object({
 	id_token: z.string()
 });
 
-const sessionSchema = z.object({
+const userSchema = z.object({
 	name: z.string(),
 	email: z.string(),
 	picture: z.string()
+});
+
+export type User = z.infer<typeof userSchema>;
+
+const sessionSchema = z.object({
+	user: userSchema,
+	expires: z.number().transform((date) => new Date(date))
 });
 
 export type Session = z.infer<typeof sessionSchema>;
@@ -55,16 +62,21 @@ export interface Provider {
 	client_secret: string;
 }
 
+/**
+ * @param {maxAge} maxAge maximum age of session in milliseconds
+ */
 interface SvauthOptions {
 	providers?: Provider[];
 	redirects?: {
 		signIn?: string;
 		signOut?: string;
 	};
+	maxAge?: number;
 }
 
-const Svauth = (options: SvauthOptions): Handle =>
-	(async ({ event, resolve }) => {
+const Svauth = (options: SvauthOptions): Handle => {
+	const maxAge = options.maxAge || 30 * 24 * 60 * 60 * 1000;
+	return (async ({ event, resolve }) => {
 		const origin = event.url.origin;
 
 		const getRedirectUrl = (optionsUrl: string | undefined) => {
@@ -156,36 +168,59 @@ const Svauth = (options: SvauthOptions): Handle =>
 
 						if (!decodedToken) return new Response('Failed to parse JWT token.', { status: 404 });
 
-						const session = sessionSchema.safeParse(decodedToken);
+						const user = userSchema.safeParse(decodedToken);
 
-						if (!session.success)
+						if (!user.success)
 							return new Response('Failed to parse name, email, and picture out of JWT token.', {
 								status: 404
 							});
 
-						const maxAge = 60 * 60 * 24 * 30; // 30 days
-						const encodedToken = jwt.sign(session.data, SVAUTH_SECRET);
+						const expiryDate = new Date();
+						expiryDate.setDate(expiryDate.getDate() + 30);
+
+						const session = {
+							expires: expiryDate.getTime(),
+							user: user.data
+						};
+
+						const encodedToken = jwt.sign(session, SVAUTH_SECRET);
 
 						return new Response('signIn', {
 							status: 301,
 							headers: {
 								Location: options?.redirects?.signIn || '/',
-								'Set-Cookie': `SVAUTH_SESSION=${encodedToken}; Max-Age=${maxAge}; Path=/;`
+								'Set-Cookie': `SVAUTH_SESSION=${encodedToken}; Path=/; Expires=${expiryDate.toUTCString()}`
 							}
 						});
 					}
 				}
 			}
-			return new Response();
+			return new Response('Svauth action not found.', {
+				status: 404
+			});
 		}
 
 		const getSession = () => {
 			const sessionCookie = event.cookies.get('SVAUTH_SESSION');
 			if (!sessionCookie) return undefined;
 			try {
-				const session = jwt.verify(sessionCookie, SVAUTH_SECRET);
-				const parsedSession = sessionSchema.safeParse(session);
-				return parsedSession.success ? parsedSession.data : null;
+				const unparsedSession = jwt.verify(sessionCookie, SVAUTH_SECRET);
+				const session = sessionSchema.parse(unparsedSession);
+				const newExpiryDate = new Date().getTime() + maxAge;
+				session.expires = new Date(newExpiryDate);
+				const encodedToken = jwt.sign(
+					{
+						expires: newExpiryDate,
+						user: session.user
+					},
+					SVAUTH_SECRET
+				);
+				event.cookies.set('SVAUTH_SESSION', encodedToken, {
+					path: '/',
+					expires: new Date(newExpiryDate)
+				});
+
+				return session;
 			} catch (error) {
 				event.cookies.delete('SVAUTH_SESSION');
 				return null;
@@ -196,6 +231,7 @@ const Svauth = (options: SvauthOptions): Handle =>
 		const response = await resolve(event);
 		return response;
 	}) satisfies Handle;
+};
 
 declare global {
 	// eslint-disable-next-line @typescript-eslint/no-namespace

@@ -4,6 +4,8 @@
 	export let data;
 
 	$: ({ session } = data);
+
+	$: console.log(session);
 </script>
 
 <h1>Welcome to Svauth's Development SvelteKit Playground</h1>
@@ -13,5 +15,6 @@
 <button on:click={() => signOut()}> Sign out </button>
 
 {#if session}
-	<p>Logged in as {session.email}</p>
+	<p>Logged in as {session.user.email}</p>
+	<p>Expires on {session.expires.toUTCString()}</p>
 {/if}
