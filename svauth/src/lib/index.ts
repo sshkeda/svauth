@@ -42,6 +42,14 @@ const tokenSchema = z.object({
 	id_token: z.string()
 });
 
+const sessionSchema = z.object({
+	name: z.string(),
+	email: z.string(),
+	picture: z.string()
+});
+
+export type Session = z.infer<typeof sessionSchema>;
+
 export interface Provider {
 	client_id: string;
 	client_secret: string;
@@ -148,8 +156,15 @@ const Svauth = (options: SvauthOptions): Handle =>
 
 						if (!decodedToken) return new Response('Failed to parse JWT token.', { status: 404 });
 
+						const session = sessionSchema.safeParse(decodedToken);
+
+						if (!session.success)
+							return new Response('Failed to parse name, email, and picture out of JWT token.', {
+								status: 404
+							});
+
 						const maxAge = 60 * 60 * 24 * 30; // 30 days
-						const encodedToken = jwt.sign(decodedToken, SVAUTH_SECRET);
+						const encodedToken = jwt.sign(session.data, SVAUTH_SECRET);
 
 						return new Response('signIn', {
 							status: 301,
@@ -168,7 +183,9 @@ const Svauth = (options: SvauthOptions): Handle =>
 			const sessionCookie = event.cookies.get('SVAUTH_SESSION');
 			if (!sessionCookie) return undefined;
 			try {
-				return jwt.verify(sessionCookie, SVAUTH_SECRET) as jwt.JwtPayload;
+				const session = jwt.verify(sessionCookie, SVAUTH_SECRET);
+				const parsedSession = sessionSchema.safeParse(session);
+				return parsedSession.success ? parsedSession.data : null;
 			} catch (error) {
 				event.cookies.delete('SVAUTH_SESSION');
 				return null;
@@ -184,7 +201,7 @@ declare global {
 	// eslint-disable-next-line @typescript-eslint/no-namespace
 	namespace App {
 		interface Locals {
-			getSession(): jwt.JwtPayload | undefined | null;
+			getSession(): Session | undefined | null;
 		}
 	}
 }
