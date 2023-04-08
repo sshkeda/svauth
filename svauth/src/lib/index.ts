@@ -15,27 +15,10 @@ const envSchema = z.object({
 const { GOOGLE_CLIENT_SECRET, GOOGLE_CLIENT_ID, SVAUTH_SECRET } = envSchema.parse(env);
 
 const publicEnvSchema = z.object({
-	PUBLIC_SVAUTH_PREFIX: z.string().default('/auth'),
-	PUBLIC_SVAUTH_URL: z.string().url().default('http://localhost:5173')
+	PUBLIC_SVAUTH_PREFIX: z.string().default('/auth')
 });
 
-const { PUBLIC_SVAUTH_PREFIX: SVAUTH_PREFIX, PUBLIC_SVAUTH_URL: SVAUTH_URL } =
-	publicEnvSchema.parse(publicEnv);
-
-const SVAUTH_PATH = SVAUTH_URL + base + SVAUTH_PREFIX;
-
-export interface Provider {
-	client_id: string;
-	client_secret: string;
-}
-
-interface SvauthOptions {
-	providers?: Provider[];
-	redirects?: {
-		signIn?: string;
-		signOut?: string;
-	};
-}
+const { PUBLIC_SVAUTH_PREFIX: SVAUTH_PREFIX } = publicEnvSchema.parse(publicEnv);
 
 const schema = z
 	.object({
@@ -59,21 +42,43 @@ const tokenSchema = z.object({
 	id_token: z.string()
 });
 
-const getSession = (sessionCookie: string | undefined) => {
-	if (!sessionCookie) return undefined;
-	try {
-		return jwt.verify(sessionCookie, SVAUTH_SECRET) as jwt.JwtPayload;
-	} catch (error) {
-		return null;
-	}
-};
+export interface Provider {
+	client_id: string;
+	client_secret: string;
+}
 
-const Svauth = (options?: SvauthOptions): Handle =>
+interface SvauthOptions {
+	providers?: Provider[];
+	redirects?: {
+		signIn?: string;
+		signOut?: string;
+	};
+}
+
+const Svauth = (options: SvauthOptions): Handle =>
 	(async ({ event, resolve }) => {
+		const origin = event.url.origin;
+
+		const getRedirectUrl = (optionsUrl: string | undefined) => {
+			if (optionsUrl) {
+				try {
+					return new URL(optionsUrl).toString();
+				} catch (err) {
+					return `${origin}${base}${optionsUrl}`;
+				}
+			} else {
+				return `${origin}${base}/`;
+			}
+		};
+
 		if (event.url.pathname.startsWith(SVAUTH_PREFIX)) {
 			if (event.request.method === 'POST') {
 				const json = (await event.request.json()) as unknown;
-				const { action, body } = schema.parse(json);
+				const parsedBody = schema.safeParse(json);
+
+				if (!parsedBody.success) return new Response('Invalid Request.', { status: 400 });
+
+				const { action, body } = parsedBody.data;
 
 				if (action === 'signIn') {
 					const { providerId } = body;
@@ -85,7 +90,7 @@ const Svauth = (options?: SvauthOptions): Handle =>
 
 						authorization_endpoint.searchParams.set(
 							'redirect_uri',
-							`${SVAUTH_PATH}/redirect/google`
+							`${origin}${base}${SVAUTH_PREFIX}/redirect/google`
 						);
 						authorization_endpoint.searchParams.set('client_id', GOOGLE_CLIENT_ID);
 						authorization_endpoint.searchParams.set('response_type', 'code');
@@ -95,9 +100,8 @@ const Svauth = (options?: SvauthOptions): Handle =>
 						return text(authorization_endpoint.toString());
 					}
 				} else if (action === 'signOut') {
-					event.cookies.delete('SVAUTH_SESSION');
-
-					return new Response(options?.redirects?.signOut || '/', {
+					const redirectUrl = getRedirectUrl(options.redirects?.signOut);
+					return new Response(redirectUrl, {
 						headers: {
 							'Set-Cookie': 'SVAUTH_SESSION=; Path=/; Max-Age=0'
 						}
@@ -112,7 +116,7 @@ const Svauth = (options?: SvauthOptions): Handle =>
 					if (provider === 'google') {
 						const code = event.url.searchParams.get('code');
 						if (!code) {
-							return new Response('NO CODE', { status: 404 });
+							return new Response('No authorization code found.', { status: 404 });
 						}
 
 						const tokenEndpoint = new URL('https://oauth2.googleapis.com/token');
@@ -122,7 +126,7 @@ const Svauth = (options?: SvauthOptions): Handle =>
 						tokenBody.set('code', code);
 						tokenBody.set('client_id', GOOGLE_CLIENT_ID);
 						tokenBody.set('client_secret', GOOGLE_CLIENT_SECRET);
-						tokenBody.set('redirect_uri', `${SVAUTH_PATH}/redirect/google`);
+						tokenBody.set('redirect_uri', `${origin}${base}${SVAUTH_PREFIX}/redirect/google`);
 						tokenBody.set('grant_type', 'authorization_code');
 
 						const tokenResponse = await fetch(tokenEndpoint.toString(), {
@@ -136,9 +140,11 @@ const Svauth = (options?: SvauthOptions): Handle =>
 
 						const tokenJson = (await tokenResponse.json()) as unknown;
 
-						const token = tokenSchema.parse(tokenJson);
+						const token = tokenSchema.safeParse(tokenJson);
 
-						const decodedToken = jwt.decode(token.id_token);
+						if (!token.success) return new Response('Invalid token response.', { status: 404 });
+
+						const decodedToken = jwt.decode(token.data.id_token);
 
 						if (!decodedToken) return new Response('Failed to parse JWT token.', { status: 404 });
 
@@ -148,8 +154,8 @@ const Svauth = (options?: SvauthOptions): Handle =>
 						return new Response('signIn', {
 							status: 301,
 							headers: {
-								Location: options?.redirects?.signIn || `${base}/`,
-								'Set-Cookie': `SVAUTH_SESSION=${encodedToken}; Max-Age=${maxAge}; SameSite=Strict; Path=/;`
+								Location: options?.redirects?.signIn || '/',
+								'Set-Cookie': `SVAUTH_SESSION=${encodedToken}; Max-Age=${maxAge}; Path=/;`
 							}
 						});
 					}
@@ -158,7 +164,18 @@ const Svauth = (options?: SvauthOptions): Handle =>
 			return new Response();
 		}
 
-		event.locals.getSession = () => getSession(event.cookies.get('SVAUTH_SESSION'));
+		const getSession = () => {
+			const sessionCookie = event.cookies.get('SVAUTH_SESSION');
+			if (!sessionCookie) return undefined;
+			try {
+				return jwt.verify(sessionCookie, SVAUTH_SECRET) as jwt.JwtPayload;
+			} catch (error) {
+				event.cookies.delete('SVAUTH_SESSION');
+				return null;
+			}
+		};
+
+		event.locals.getSession = () => getSession();
 		const response = await resolve(event);
 		return response;
 	}) satisfies Handle;

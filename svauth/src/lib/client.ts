@@ -27,5 +27,9 @@ export const signOut = async () => {
 
 	const url = new URL(await res.text());
 
-	goto(url);
+	if (url.origin === window.location.origin)
+		goto(url.pathname, {
+			invalidateAll: true
+		});
+	else (window as Window).location = url.toString();
 };

@@ -1,11 +1,9 @@
 <script lang="ts">
 	import { signIn, signOut } from 'svauth/client';
 
-	import type { PageData } from './$types';
+	export let data;
 
-	export let data: PageData;
-
-	const { session } = data;
+	$: ({ session } = data);
 </script>
 
 <h1>Welcome to Svauth's Development SvelteKit Playground</h1>
