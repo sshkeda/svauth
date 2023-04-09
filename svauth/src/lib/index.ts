@@ -173,7 +173,13 @@ const Svauth = (options: SvauthOptions): Handle => {
 
 					const tokenJson = (await tokenResponse.json()) as unknown;
 
-					const user = await config.getUser(tokenJson);
+					let user: User;
+					try {
+						user = await config.getUser(tokenJson);
+					} catch (err) {
+						if (err instanceof Error) return new Response(err.message, { status: 404 });
+						return new Response('Error getting user.', { status: 404 });
+					}
 
 					const expiryDate = new Date();
 					expiryDate.setDate(expiryDate.getDate() + 30);
