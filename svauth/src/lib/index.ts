@@ -32,14 +32,6 @@ const schema = z
 		})
 	);
 
-const tokenSchema = z.object({
-	access_token: z.string(),
-	expires_in: z.number(),
-	scope: z.string(),
-	token_type: z.string(),
-	id_token: z.string()
-});
-
 const userSchema = z.object({
 	id: z.string(),
 	name: z.string(),
@@ -122,7 +114,7 @@ const Svauth = (options: SvauthOptions): Handle => {
 
 					authorizationEndpoint.searchParams.set(
 						'redirect_uri',
-						`${origin}${base}${SVAUTH_PREFIX}/redirect/${providerId}`
+						`${origin}${base}${SVAUTH_PREFIX}/callback/${providerId}`
 					);
 					authorizationEndpoint.searchParams.set('client_id', config.clientId);
 					authorizationEndpoint.searchParams.set('response_type', 'code');
@@ -140,11 +132,12 @@ const Svauth = (options: SvauthOptions): Handle => {
 					});
 				}
 			} else if (event.request.method === 'GET') {
-				const path = event.url.pathname.split('/');
-				const action = path[2];
+				const path = event.url.pathname.slice(`${base}${SVAUTH_PREFIX}`.length);
+				const eventPath = path.split('/');
+				const action = eventPath[1];
 
-				if (action === 'redirect') {
-					const providerId = path[3];
+				if (action === 'callback') {
+					const providerId = eventPath[2];
 					const config = providers[providerId] as OAuthProvider | undefined;
 
 					if (!config) return new Response('Invalid provider.', { status: 404 });
@@ -155,164 +148,132 @@ const Svauth = (options: SvauthOptions): Handle => {
 						return new Response('No authorization code found.', { status: 404 });
 					}
 
-					if (providerId === 'google') {
-						const tokenEndpoint = new URL('https://oauth2.googleapis.com/token');
+					const tokenEndpoint = new URL(config.tokenEndpoint);
 
-						const tokenBody = new URLSearchParams();
+					const tokenBody = new URLSearchParams();
 
-						tokenBody.set('code', code);
-						tokenBody.set('client_id', providers.google.clientId);
-						tokenBody.set('client_secret', providers.google.clientSecret);
-						tokenBody.set('redirect_uri', `${origin}${base}${SVAUTH_PREFIX}/redirect/google`);
-						tokenBody.set('grant_type', 'authorization_code');
+					tokenBody.set('client_id', config.clientId);
+					tokenBody.set('client_secret', config.clientSecret);
+					tokenBody.set('grant_type', 'authorization_code');
+					tokenBody.set('code', code);
+					tokenBody.set('redirect_uri', `${origin}${base}${SVAUTH_PREFIX}/callback/${providerId}`);
 
-						const tokenResponse = await fetch(tokenEndpoint.toString(), {
-							method: 'POST',
-							headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-							body: tokenBody
-						});
+					const tokenResponse = await fetch(tokenEndpoint.toString(), {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+						body: tokenBody
+					});
 
-						if (!tokenResponse.ok)
-							return new Response('Problem with given authorization code.', { status: 404 });
+					if (!tokenResponse.ok)
+						return new Response('Problem with given authorization code.', { status: 404 });
 
-						const tokenJson = (await tokenResponse.json()) as unknown;
+					const tokenJson = (await tokenResponse.json()) as unknown;
 
-						console.log(tokenJson);
-						const token = tokenSchema.safeParse(tokenJson);
-
-						if (!token.success) return new Response('Invalid token response.', { status: 404 });
-
-						const decodedToken = jwt.decode(token.data.id_token);
-
-						if (!decodedToken || typeof decodedToken === 'string')
-							return new Response('Failed to parse JWT token.', { status: 404 });
-
-						decodedToken.id = decodedToken.sub;
-
-						const parsedUser = userSchema.safeParse(decodedToken);
-
-						if (!parsedUser.success)
-							return new Response('Failed to parse name, email, and picture out of JWT token.', {
-								status: 404
+					const getUser = async () => {
+						if (providerId === 'google') {
+							const tokenSchema = z.object({
+								id_token: z.string()
 							});
 
-						const user = parsedUser.data;
+							const parsedToken = tokenSchema.safeParse(tokenJson);
 
-						const expiryDate = new Date();
-						expiryDate.setDate(expiryDate.getDate() + 30);
+							if (!parsedToken.success) return new Response('No Id token found.', { status: 404 });
 
-						const session = {
-							expires: expiryDate.getTime(),
-							user
-						};
+							const { id_token } = parsedToken.data;
+							const decodedToken = jwt.decode(id_token);
 
-						const encodedToken = jwt.sign(session, SVAUTH_SECRET);
+							if (!decodedToken || typeof decodedToken === 'string')
+								return new Response('Failed to parse JWT token.', { status: 404 });
 
-						return new Response('signIn', {
-							status: 301,
-							headers: {
-								Location: options?.redirects?.signIn || '/',
-								'Set-Cookie': `SVAUTH_SESSION=${encodedToken}; Path=/; Expires=${expiryDate.toUTCString()}`
-							}
-						});
-					} else if (providerId === 'discord') {
-						const tokenEndpoint = new URL(config.tokenEndpoint);
+							decodedToken.id = decodedToken.sub;
 
-						const tokenBody = new URLSearchParams();
+							const parsedUser = userSchema.safeParse(decodedToken);
 
-						tokenBody.set('client_id', config.clientId);
-						tokenBody.set('client_secret', config.clientSecret);
-						tokenBody.set('grant_type', 'authorization_code');
-						tokenBody.set('code', code);
-						tokenBody.set('redirect_uri', `${origin}${base}${SVAUTH_PREFIX}/redirect/discord`);
+							if (!parsedUser.success)
+								return new Response('Failed to parse name, email, and picture out of JWT token.', {
+									status: 404
+								});
 
-						const tokenResponse = await fetch(tokenEndpoint.toString(), {
-							method: 'POST',
-							headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-							body: tokenBody
-						});
-
-						if (!tokenResponse.ok)
-							return new Response('Problem with given authorization code.', { status: 404 });
-
-						const tokenJson = (await tokenResponse.json()) as unknown;
-
-						const discordSchema = z.object({
-							access_token: z.string(),
-							token_type: z.string(),
-							expires_in: z.number(),
-							refresh_token: z.string(),
-							scope: z.string()
-						});
-
-						const token = discordSchema.safeParse(tokenJson);
-
-						if (!token.success) return new Response('Invalid token response.', { status: 404 });
-
-						const userResponse = await fetch('https://discord.com/api/users/@me', {
-							headers: {
-								Authorization: `Bearer ${token.data.access_token}`
-							}
-						});
-
-						if (!userResponse.ok)
-							return new Response('Problem with accessing current authorization info.', {
-								status: 404
-							});
-
-						const userJson = (await userResponse.json()) as unknown;
-
-						const discordUserSchema = z.object({
-							id: z.string(),
-							username: z.string(),
-							avatar: z.string().nullable(),
-							discriminator: z.string(),
-							email: z.string()
-						});
-
-						console.log(userJson);
-
-						const parsedUser = discordUserSchema.safeParse(userJson);
-
-						if (!parsedUser.success)
-							return new Response('Failed to parse discord user info.', {
-								status: 404
-							});
-
-						const discorduser = parsedUser.data;
-						const user = {
-							id: discorduser.id,
-							email: discorduser.email,
-							name: discorduser.username,
-							picture: ''
-						} satisfies User;
-
-						if (!discorduser.avatar) {
-							const defaultAvatarNumber = parseInt(discorduser.discriminator) % 5;
-							user.picture = `https://cdn.discordapp.com/embed/avatars/${defaultAvatarNumber}.png`;
+							return parsedUser.data;
 						} else {
-							const format = discorduser.avatar.startsWith('a_') ? 'gif' : 'png';
-							user.picture = `https://cdn.discordapp.com/avatars/${discorduser.id}/${discorduser.avatar}.${format}`;
-						}
+							// Discord
+							const discordSchema = z.object({
+								access_token: z.string(),
+								token_type: z.string(),
+								expires_in: z.number(),
+								refresh_token: z.string(),
+								scope: z.string()
+							});
 
-						const expiryDate = new Date();
-						expiryDate.setDate(expiryDate.getDate() + 30);
+							const token = discordSchema.safeParse(tokenJson);
 
-						const session = {
-							expires: expiryDate.getTime(),
-							user
-						};
+							if (!token.success) return new Response('Invalid token response.', { status: 404 });
 
-						const encodedToken = jwt.sign(session, SVAUTH_SECRET);
+							const userResponse = await fetch('https://discord.com/api/users/@me', {
+								headers: {
+									Authorization: `Bearer ${token.data.access_token}`
+								}
+							});
 
-						return new Response('signIn', {
-							status: 301,
-							headers: {
-								Location: options?.redirects?.signIn || '/',
-								'Set-Cookie': `SVAUTH_SESSION=${encodedToken}; Path=/; Expires=${expiryDate.toUTCString()}`
+							if (!userResponse.ok)
+								return new Response('Problem with accessing current authorization info.', {
+									status: 404
+								});
+
+							const userJson = (await userResponse.json()) as unknown;
+
+							const discordUserSchema = z.object({
+								id: z.string(),
+								username: z.string(),
+								avatar: z.string().nullable(),
+								discriminator: z.string(),
+								email: z.string()
+							});
+
+							const parsedUser = discordUserSchema.safeParse(userJson);
+
+							if (!parsedUser.success)
+								return new Response('Failed to parse discord user info.', {
+									status: 404
+								});
+
+							const discorduser = parsedUser.data;
+							const user = {
+								id: discorduser.id,
+								email: discorduser.email,
+								name: discorduser.username,
+								picture: ''
+							} satisfies User;
+
+							if (!discorduser.avatar) {
+								const defaultAvatarNumber = parseInt(discorduser.discriminator) % 5;
+								user.picture = `https://cdn.discordapp.com/embed/avatars/${defaultAvatarNumber}.png`;
+							} else {
+								const format = discorduser.avatar.startsWith('a_') ? 'gif' : 'png';
+								user.picture = `https://cdn.discordapp.com/avatars/${discorduser.id}/${discorduser.avatar}.${format}`;
 							}
-						});
-					}
+							return user;
+						}
+					};
+
+					const user = await getUser();
+
+					const expiryDate = new Date();
+					expiryDate.setDate(expiryDate.getDate() + 30);
+
+					const session = {
+						expires: expiryDate.getTime(),
+						user
+					};
+
+					const encodedToken = jwt.sign(session, SVAUTH_SECRET);
+					return new Response('signIn', {
+						status: 301,
+						headers: {
+							Location: options?.redirects?.signIn || '/',
+							'Set-Cookie': `SVAUTH_SESSION=${encodedToken}; Path=/; Expires=${expiryDate.toUTCString()}`
+						}
+					});
 				}
 			}
 			return new Response('Svauth action not found.', {
