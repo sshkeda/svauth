@@ -32,17 +32,20 @@ const schema = z
 		})
 	);
 
-const userSchema = z.object({
-	id: z.string(),
-	name: z.string(),
-	email: z.string(),
-	picture: z.string()
-});
-
-export type User = z.infer<typeof userSchema>;
+export type User = {
+	id: string;
+	name: string;
+	email: string;
+	picture: string;
+};
 
 const sessionSchema = z.object({
-	user: userSchema,
+	user: z.object({
+		id: z.string(),
+		name: z.string(),
+		email: z.string(),
+		picture: z.string()
+	}),
 	expires: z.number().transform((date) => new Date(date))
 });
 
@@ -53,6 +56,7 @@ export interface OAuthProvider extends Provider {
 	authorizationEndpoint: string;
 	tokenEndpoint: string;
 	nonce?: boolean;
+	getUser: (tokenJson: unknown) => Promise<User>;
 }
 
 export interface Provider {
@@ -169,94 +173,7 @@ const Svauth = (options: SvauthOptions): Handle => {
 
 					const tokenJson = (await tokenResponse.json()) as unknown;
 
-					const getUser = async () => {
-						if (providerId === 'google') {
-							const tokenSchema = z.object({
-								id_token: z.string()
-							});
-
-							const parsedToken = tokenSchema.safeParse(tokenJson);
-
-							if (!parsedToken.success) return new Response('No Id token found.', { status: 404 });
-
-							const { id_token } = parsedToken.data;
-							const decodedToken = jwt.decode(id_token);
-
-							if (!decodedToken || typeof decodedToken === 'string')
-								return new Response('Failed to parse JWT token.', { status: 404 });
-
-							decodedToken.id = decodedToken.sub;
-
-							const parsedUser = userSchema.safeParse(decodedToken);
-
-							if (!parsedUser.success)
-								return new Response('Failed to parse name, email, and picture out of JWT token.', {
-									status: 404
-								});
-
-							return parsedUser.data;
-						} else {
-							// Discord
-							const discordSchema = z.object({
-								access_token: z.string(),
-								token_type: z.string(),
-								expires_in: z.number(),
-								refresh_token: z.string(),
-								scope: z.string()
-							});
-
-							const token = discordSchema.safeParse(tokenJson);
-
-							if (!token.success) return new Response('Invalid token response.', { status: 404 });
-
-							const userResponse = await fetch('https://discord.com/api/users/@me', {
-								headers: {
-									Authorization: `Bearer ${token.data.access_token}`
-								}
-							});
-
-							if (!userResponse.ok)
-								return new Response('Problem with accessing current authorization info.', {
-									status: 404
-								});
-
-							const userJson = (await userResponse.json()) as unknown;
-
-							const discordUserSchema = z.object({
-								id: z.string(),
-								username: z.string(),
-								avatar: z.string().nullable(),
-								discriminator: z.string(),
-								email: z.string()
-							});
-
-							const parsedUser = discordUserSchema.safeParse(userJson);
-
-							if (!parsedUser.success)
-								return new Response('Failed to parse discord user info.', {
-									status: 404
-								});
-
-							const discorduser = parsedUser.data;
-							const user = {
-								id: discorduser.id,
-								email: discorduser.email,
-								name: discorduser.username,
-								picture: ''
-							} satisfies User;
-
-							if (!discorduser.avatar) {
-								const defaultAvatarNumber = parseInt(discorduser.discriminator) % 5;
-								user.picture = `https://cdn.discordapp.com/embed/avatars/${defaultAvatarNumber}.png`;
-							} else {
-								const format = discorduser.avatar.startsWith('a_') ? 'gif' : 'png';
-								user.picture = `https://cdn.discordapp.com/avatars/${discorduser.id}/${discorduser.avatar}.${format}`;
-							}
-							return user;
-						}
-					};
-
-					const user = await getUser();
+					const user = await config.getUser(tokenJson);
 
 					const expiryDate = new Date();
 					expiryDate.setDate(expiryDate.getDate() + 30);
