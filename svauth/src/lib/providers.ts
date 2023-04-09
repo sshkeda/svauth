@@ -1,2 +1,3 @@
 import Google from './providers/google';
-export { Google };
+import Discord from './providers/discord';
+export { Google, Discord };

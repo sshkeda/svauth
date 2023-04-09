@@ -7,12 +7,10 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 
 const envSchema = z.object({
-	GOOGLE_CLIENT_SECRET: z.string(),
-	GOOGLE_CLIENT_ID: z.string(),
 	SVAUTH_SECRET: z.string()
 });
 
-const { GOOGLE_CLIENT_SECRET, GOOGLE_CLIENT_ID, SVAUTH_SECRET } = envSchema.parse(env);
+const { SVAUTH_SECRET } = envSchema.parse(env);
 
 const publicEnvSchema = z.object({
 	PUBLIC_SVAUTH_PREFIX: z.string().default('/auth')
@@ -43,6 +41,7 @@ const tokenSchema = z.object({
 });
 
 const userSchema = z.object({
+	id: z.string(),
 	name: z.string(),
 	email: z.string(),
 	picture: z.string()
@@ -57,16 +56,24 @@ const sessionSchema = z.object({
 
 export type Session = z.infer<typeof sessionSchema>;
 
+export interface OAuthProvider extends Provider {
+	scope: string;
+	authorizationEndpoint: string;
+	tokenEndpoint: string;
+	nonce?: boolean;
+}
+
 export interface Provider {
-	client_id: string;
-	client_secret: string;
+	clientId: string;
+	clientSecret: string;
+	name: string;
 }
 
 /**
- * @param {maxAge} maxAge maximum age of session in milliseconds
+ * @param {maxAge} maxAge maximum age of session in milliseconds. Defaults to 30 days.
  */
 interface SvauthOptions {
-	providers?: Provider[];
+	providers: Provider[];
 	redirects?: {
 		signIn?: string;
 		signOut?: string;
@@ -76,6 +83,11 @@ interface SvauthOptions {
 
 const Svauth = (options: SvauthOptions): Handle => {
 	const maxAge = options.maxAge || 30 * 24 * 60 * 60 * 1000;
+
+	const providers = Object.fromEntries(
+		options.providers.map((provider) => [provider.name, provider])
+	);
+
 	return (async ({ event, resolve }) => {
 		const origin = event.url.origin;
 
@@ -103,22 +115,22 @@ const Svauth = (options: SvauthOptions): Handle => {
 				if (action === 'signIn') {
 					const { providerId } = body;
 
-					if (providerId === 'google') {
-						const nonce = crypto.randomBytes(32).toString('hex');
+					const config = providers[providerId] as OAuthProvider | undefined;
+					if (!config) return new Response('Invalid provider.', { status: 400 });
 
-						const authorization_endpoint = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+					const authorizationEndpoint = new URL(config.authorizationEndpoint);
 
-						authorization_endpoint.searchParams.set(
-							'redirect_uri',
-							`${origin}${base}${SVAUTH_PREFIX}/redirect/google`
-						);
-						authorization_endpoint.searchParams.set('client_id', GOOGLE_CLIENT_ID);
-						authorization_endpoint.searchParams.set('response_type', 'code');
-						authorization_endpoint.searchParams.set('scope', 'openid email profile');
-						authorization_endpoint.searchParams.set('nonce', nonce);
+					authorizationEndpoint.searchParams.set(
+						'redirect_uri',
+						`${origin}${base}${SVAUTH_PREFIX}/redirect/${providerId}`
+					);
+					authorizationEndpoint.searchParams.set('client_id', config.clientId);
+					authorizationEndpoint.searchParams.set('response_type', 'code');
+					authorizationEndpoint.searchParams.set('scope', config.scope);
+					if (config.nonce)
+						authorizationEndpoint.searchParams.set('nonce', crypto.randomBytes(32).toString('hex'));
 
-						return text(authorization_endpoint.toString());
-					}
+					return text(authorizationEndpoint.toString());
 				} else if (action === 'signOut') {
 					const redirectUrl = getRedirectUrl(options.redirects?.signOut);
 					return new Response(redirectUrl, {
@@ -132,20 +144,25 @@ const Svauth = (options: SvauthOptions): Handle => {
 				const action = path[2];
 
 				if (action === 'redirect') {
-					const provider = path[3];
-					if (provider === 'google') {
-						const code = event.url.searchParams.get('code');
-						if (!code) {
-							return new Response('No authorization code found.', { status: 404 });
-						}
+					const providerId = path[3];
+					const config = providers[providerId] as OAuthProvider | undefined;
 
+					if (!config) return new Response('Invalid provider.', { status: 404 });
+
+					const code = event.url.searchParams.get('code');
+
+					if (!code) {
+						return new Response('No authorization code found.', { status: 404 });
+					}
+
+					if (providerId === 'google') {
 						const tokenEndpoint = new URL('https://oauth2.googleapis.com/token');
 
 						const tokenBody = new URLSearchParams();
 
 						tokenBody.set('code', code);
-						tokenBody.set('client_id', GOOGLE_CLIENT_ID);
-						tokenBody.set('client_secret', GOOGLE_CLIENT_SECRET);
+						tokenBody.set('client_id', providers.google.clientId);
+						tokenBody.set('client_secret', providers.google.clientSecret);
 						tokenBody.set('redirect_uri', `${origin}${base}${SVAUTH_PREFIX}/redirect/google`);
 						tokenBody.set('grant_type', 'authorization_code');
 
@@ -160,27 +177,130 @@ const Svauth = (options: SvauthOptions): Handle => {
 
 						const tokenJson = (await tokenResponse.json()) as unknown;
 
+						console.log(tokenJson);
 						const token = tokenSchema.safeParse(tokenJson);
 
 						if (!token.success) return new Response('Invalid token response.', { status: 404 });
 
 						const decodedToken = jwt.decode(token.data.id_token);
 
-						if (!decodedToken) return new Response('Failed to parse JWT token.', { status: 404 });
+						if (!decodedToken || typeof decodedToken === 'string')
+							return new Response('Failed to parse JWT token.', { status: 404 });
 
-						const user = userSchema.safeParse(decodedToken);
+						decodedToken.id = decodedToken.sub;
 
-						if (!user.success)
+						const parsedUser = userSchema.safeParse(decodedToken);
+
+						if (!parsedUser.success)
 							return new Response('Failed to parse name, email, and picture out of JWT token.', {
 								status: 404
 							});
+
+						const user = parsedUser.data;
 
 						const expiryDate = new Date();
 						expiryDate.setDate(expiryDate.getDate() + 30);
 
 						const session = {
 							expires: expiryDate.getTime(),
-							user: user.data
+							user
+						};
+
+						const encodedToken = jwt.sign(session, SVAUTH_SECRET);
+
+						return new Response('signIn', {
+							status: 301,
+							headers: {
+								Location: options?.redirects?.signIn || '/',
+								'Set-Cookie': `SVAUTH_SESSION=${encodedToken}; Path=/; Expires=${expiryDate.toUTCString()}`
+							}
+						});
+					} else if (providerId === 'discord') {
+						const tokenEndpoint = new URL(config.tokenEndpoint);
+
+						const tokenBody = new URLSearchParams();
+
+						tokenBody.set('client_id', config.clientId);
+						tokenBody.set('client_secret', config.clientSecret);
+						tokenBody.set('grant_type', 'authorization_code');
+						tokenBody.set('code', code);
+						tokenBody.set('redirect_uri', `${origin}${base}${SVAUTH_PREFIX}/redirect/discord`);
+
+						const tokenResponse = await fetch(tokenEndpoint.toString(), {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+							body: tokenBody
+						});
+
+						if (!tokenResponse.ok)
+							return new Response('Problem with given authorization code.', { status: 404 });
+
+						const tokenJson = (await tokenResponse.json()) as unknown;
+
+						const discordSchema = z.object({
+							access_token: z.string(),
+							token_type: z.string(),
+							expires_in: z.number(),
+							refresh_token: z.string(),
+							scope: z.string()
+						});
+
+						const token = discordSchema.safeParse(tokenJson);
+
+						if (!token.success) return new Response('Invalid token response.', { status: 404 });
+
+						const userResponse = await fetch('https://discord.com/api/users/@me', {
+							headers: {
+								Authorization: `Bearer ${token.data.access_token}`
+							}
+						});
+
+						if (!userResponse.ok)
+							return new Response('Problem with accessing current authorization info.', {
+								status: 404
+							});
+
+						const userJson = (await userResponse.json()) as unknown;
+
+						const discordUserSchema = z.object({
+							id: z.string(),
+							username: z.string(),
+							avatar: z.string().nullable(),
+							discriminator: z.string(),
+							email: z.string()
+						});
+
+						console.log(userJson);
+
+						const parsedUser = discordUserSchema.safeParse(userJson);
+
+						if (!parsedUser.success)
+							return new Response('Failed to parse discord user info.', {
+								status: 404
+							});
+
+						const discorduser = parsedUser.data;
+						const user = {
+							id: discorduser.id,
+							email: discorduser.email,
+							name: discorduser.username,
+							picture: ''
+						} satisfies User;
+
+						if (!discorduser.avatar) {
+							const defaultAvatarNumber = parseInt(discorduser.discriminator) % 5;
+							user.picture = `https://cdn.discordapp.com/embed/avatars/${defaultAvatarNumber}.png`;
+						} else {
+							const format = discorduser.avatar.startsWith('a_') ? 'gif' : 'png';
+							user.picture = `https://cdn.discordapp.com/avatars/${discorduser.id}/${discorduser.avatar}.${format}`;
+						}
+
+						const expiryDate = new Date();
+						expiryDate.setDate(expiryDate.getDate() + 30);
+
+						const session = {
+							expires: expiryDate.getTime(),
+							user
 						};
 
 						const encodedToken = jwt.sign(session, SVAUTH_SECRET);
@@ -206,7 +326,7 @@ const Svauth = (options: SvauthOptions): Handle => {
 			try {
 				const unparsedSession = jwt.verify(sessionCookie, SVAUTH_SECRET);
 				const session = sessionSchema.parse(unparsedSession);
-				if (session.expires.getTime() < new Date().getTime()) {
+				if (session.expires < new Date()) {
 					event.cookies.delete('SVAUTH_SESSION');
 					return null;
 				}

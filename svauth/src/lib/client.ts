@@ -1,4 +1,4 @@
-type ProviderId = 'google';
+type ProviderId = 'google' | 'discord';
 import { env } from '$env/dynamic/public';
 import { goto } from '$app/navigation';
 

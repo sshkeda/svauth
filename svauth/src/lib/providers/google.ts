@@ -1,14 +1,19 @@
-import type { Provider } from '$lib';
+import type { OAuthProvider } from '$lib';
 
 interface GoogleConfig {
 	clientId: string;
 	clientSecret: string;
 }
 
-const Google = ({ clientId, clientSecret }: GoogleConfig): Provider => {
+const Google = ({ clientId, clientSecret }: GoogleConfig): OAuthProvider => {
 	return {
-		client_id: clientId,
-		client_secret: clientSecret
+		name: 'google',
+		clientId,
+		clientSecret,
+		scope: 'openid email profile',
+		authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+		tokenEndpoint: 'https://oauth2.googleapis.com/token',
+		nonce: true
 	};
 };
 
