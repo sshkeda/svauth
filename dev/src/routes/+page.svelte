@@ -1,21 +1,32 @@
 <script>
 	import { signIn, signOut } from 'svauth/client';
-
+	import { GoogleSignInButton } from 'svauth/components';
 	export let data;
 
 	$: ({ session } = data);
 </script>
 
-<h1>Welcome to Svauth's Development SvelteKit Playground</h1>
-<p>Visit <a href="https://kit.svelte.dev">kit.svelte.dev</a> to read the SvelteKit documentation</p>
+<h1>Welcome to svauth's Development SvelteKit Playground</h1>
+<p>
+	Visit <a href="https://github.com/sshkeda/svauth">svauth's github repository</a> to read the svauth
+	documentation
+</p>
 
 {#if session}
 	<button on:click={() => signOut()}> Sign out </button>
 	<p>Logged in as {session.user.email}</p>
+	<p>ID: {session.user.id}</p>
 	<img src={session.user.picture} alt="User profile" />
-	<p>Expires on {session.expires.toUTCString()}</p>
+	<p>Token expires on {session.expires.toUTCString()}</p>
 {:else}
+	<GoogleSignInButton />
 	<button on:click={() => signIn('google')}> Google sign in </button>
 	<button on:click={() => signIn('discord')}> Discord sign in </button>
 	<p>Not signed in</p>
 {/if}
+
+<style>
+	:global(body) {
+		font-family: 'Segoe UI';
+	}
+</style>

@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "turbo run dev"
+    "dev": "turbo run dev --filter=svauth --filter=dev"
   },
   "devDependencies": {
     "turbo": "^1.8.8"

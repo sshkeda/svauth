@@ -1,12 +1,25 @@
-import type { OAuthProvider, User } from '$lib';
+import type { OAuthProvider } from '$lib';
 import { z } from 'zod';
-import jwt from 'jsonwebtoken';
+import * as jose from 'jose';
 
 interface GoogleConfig {
 	clientId: string;
 	clientSecret: string;
 }
 
+const googleSchema = z.object({
+	sub: z.string(),
+	name: z.string(),
+	email: z.string(),
+	picture: z.string()
+});
+
+/**
+ * Svauth Google Provider
+ *
+ * @see https://developers.google.com/identity/protocols/oauth2/openid-connect
+ *
+ */
 const Google = ({ clientId, clientSecret }: GoogleConfig): OAuthProvider => {
 	return {
 		name: 'google',
@@ -16,36 +29,62 @@ const Google = ({ clientId, clientSecret }: GoogleConfig): OAuthProvider => {
 		authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
 		tokenEndpoint: 'https://oauth2.googleapis.com/token',
 		nonce: true,
-		getUser: async (tokenJson: unknown) => {
+		jwksEndpoint: 'https://www.googleapis.com/oauth2/v3/certs',
+		verifyToken: async function (token: string) {
+			try {
+				const JWKS = jose.createRemoteJWKSet(new URL(this.jwksEndpoint as string));
+
+				const decodedToken = await jose.jwtVerify(token, JWKS);
+
+				return {
+					ok: true,
+					data: decodedToken.payload
+				};
+			} catch (err) {
+				return {
+					ok: false,
+					error: 'Failed to verify JWT token.'
+				};
+			}
+		},
+		parseToken: async function (tokenJson: unknown) {
 			const tokenSchema = z.object({
 				id_token: z.string()
 			});
 
 			const parsedToken = tokenSchema.safeParse(tokenJson);
 
-			if (!parsedToken.success) throw new Error('No Id token found.');
+			if (!parsedToken.success)
+				return {
+					ok: false,
+					error: 'Invalid token response.'
+				};
 
 			const { id_token } = parsedToken.data;
-			const decodedToken = jwt.decode(id_token);
 
-			if (!decodedToken || typeof decodedToken === 'string')
-				throw new Error('Failed to parse JWT token.');
+			return this.verifyToken(id_token);
+		},
+		parseUser: async function (jwt: jose.JWTPayload) {
+			try {
+				const googleUser = googleSchema.parse(jwt);
 
-			decodedToken.id = decodedToken.sub;
+				const user = {
+					id: googleUser.sub,
+					name: googleUser.name,
+					email: googleUser.email,
+					picture: googleUser.picture
+				};
 
-			const googleUserSchema = z.object({
-				id: z.string(),
-				name: z.string(),
-				email: z.string(),
-				picture: z.string()
-			});
-
-			const parsedUser = googleUserSchema.safeParse(decodedToken);
-
-			if (!parsedUser.success)
-				throw new Error('Failed to parse name, email, and picture out of JWT token.');
-
-			return parsedUser.data;
+				return {
+					ok: true,
+					data: user
+				};
+			} catch (err) {
+				return {
+					ok: false,
+					error: 'Failed to parse user info from token.'
+				};
+			}
 		}
 	};
 };

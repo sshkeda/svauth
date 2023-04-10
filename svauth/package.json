@@ -24,6 +24,10 @@
 		"./providers": {
 			"types": "./dist/providers.d.ts",
 			"default": "./dist/providers.js"
+		},
+		"./components": {
+			"types": "./dist/components.d.ts",
+			"default": "./dist/components.js"
 		}
 	},
 	"typesVersions": {
@@ -33,6 +37,9 @@
 			],
 			"providers": [
 				"./dist/providers.d.ts"
+			],
+			"components": [
+				"./dist/components.d.ts"
 			]
 		}
 	},
@@ -46,7 +53,6 @@
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^2.0.0",
 		"@sveltejs/package": "^2.0.2",
-		"@types/jsonwebtoken": "^9.0.1",
 		"@types/node": "^18.15.11",
 		"@typescript-eslint/eslint-plugin": "^5.57.1",
 		"@typescript-eslint/parser": "^5.57.1",
@@ -66,7 +72,8 @@
 	"types": "./dist/index.d.ts",
 	"type": "module",
 	"dependencies": {
-		"jsonwebtoken": "^9.0.0",
+		"esm-env": "^1.0.0",
+		"jose": "^4.13.1",
 		"zod": "^3.21.4"
 	}
 }
