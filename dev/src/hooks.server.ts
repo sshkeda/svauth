@@ -19,5 +19,5 @@ export const handle = Svauth({
 			clientSecret: DISCORD_CLIENT_SECRET
 		})
 	],
-	expires: '3s'
+	expires: '30d'
 });

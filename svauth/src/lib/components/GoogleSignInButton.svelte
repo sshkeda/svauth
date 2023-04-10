@@ -1,36 +1,77 @@
-<script>
+<script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { env } from '$env/dynamic/public';
 
-	onMount(() => {
-		// @ts-ignore
-		const handleCredentialResponse = (response) => {
+	let googleScript: HTMLScriptElement;
+
+	export let oneTap: boolean = false;
+
+	// https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/types/google-one-tap/index.d.ts
+	interface GsiButtonConfiguration {
+		type?: 'standard' | 'icon';
+		theme?: 'outline' | 'filled_blue' | 'filled_black';
+		size?: 'large' | 'medium' | 'small';
+		text?: 'signin_with' | 'signup_with' | 'continue_with' | 'signin';
+		shape?: 'rectangular' | 'pill' | 'circle' | 'square';
+		logo_alignment?: 'left' | 'center';
+		width?: number;
+		locale?: string;
+	}
+
+	export let config: GsiButtonConfiguration = {
+		theme: 'outline',
+		size: 'large'
+	};
+
+	onMount(async () => {
+		interface CredentialResponse {
+			credential: string;
+		}
+
+		const handleCredentialResponse = (response: CredentialResponse) => {
 			const token = response.credential;
 			goto('/auth/callback/token/?provider=google&token=' + token);
 		};
 
-		// @ts-ignore
-		google.accounts.id.initialize({
+		const initializeGoogle = () => {
 			// @ts-ignore
-			client_id: env.PUBLIC_GOOGLE_CLIENT_ID,
-			callback: handleCredentialResponse
-		});
-		const googleButtonDiv = document.getElementById('googleButtonDiv');
-		if (!googleButtonDiv) {
-			throw new Error('googleButtonDiv not found');
+			google.accounts.id.initialize({
+				client_id: env.PUBLIC_GOOGLE_CLIENT_ID,
+				callback: handleCredentialResponse
+			});
+			const googleButtonDiv = document.getElementById('googleButtonDiv');
+			if (!googleButtonDiv) {
+				throw new Error('googleButtonDiv not found');
+			}
+			// @ts-ignore
+			google.accounts.id.renderButton(googleButtonDiv, config);
+
+			if (oneTap) {
+				// @ts-ignore
+				google.accounts.id.prompt();
+			}
+		};
+
+		try {
+			initializeGoogle();
+		} catch (err) {
+			googleScript.addEventListener('load', initializeGoogle);
 		}
-		// @ts-ignore
-		google.accounts.id.renderButton(googleButtonDiv, {
-			theme: 'outline',
-			size: 'large'
-		});
-		// google.accounts.id.prompt(); // also display the One Tap dialog
+
+		return () => {
+			googleScript.removeEventListener('load', initializeGoogle);
+		};
 	});
 </script>
 
 <svelte:head>
-	<script src="https://accounts.google.com/gsi/client" async defer></script>
+	<script
+		src="https://accounts.google.com/gsi/client"
+		defer
+		async
+		bind:this={googleScript}
+	></script>
 </svelte:head>
 
 <div id="googleButtonContainer">
