@@ -1,7 +1,7 @@
 import z from 'zod';
 import { env } from '$env/dynamic/private';
 import { env as publicEnv } from '$env/dynamic/public';
-import { text, type Handle, type RequestEvent } from '@sveltejs/kit';
+import { text, type Handle, type RequestEvent, json } from '@sveltejs/kit';
 import { base } from '$app/paths';
 import crypto from 'crypto';
 import * as jose from 'jose';
@@ -244,8 +244,8 @@ const Svauth = (options: SvauthOptions): Handle => {
 };
 
 const handlePOST = async (settings: Settings, event: RequestEvent, providers: ProvidersObject) => {
-	const json = (await event.request.json()) as unknown;
-	const parsedBody = postBodySchema.safeParse(json);
+	const postBody = (await event.request.json()) as unknown;
+	const parsedBody = postBodySchema.safeParse(postBody);
 
 	if (!parsedBody.success) return new Response('Invalid Request.', { status: 400 });
 
@@ -298,6 +298,11 @@ const handleGET = async (settings: Settings, event: RequestEvent, providers: Pro
 	const path = event.url.pathname.slice(`${base}${SVAUTH_PREFIX}`.length);
 	const eventPath = path.split('/');
 	const action = eventPath[1];
+
+	if (action === 'session') {
+		const session = await getSession(event, settings.expires);
+		return json(session);
+	}
 
 	if (action !== 'callback') {
 		return new Response('Invalid Svauth action.', { status: 404 });
