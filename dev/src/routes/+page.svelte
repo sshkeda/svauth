@@ -12,7 +12,7 @@
 	documentation
 </p>
 <p>
-	Test out session with no load component <a href="/no-load">here</a>
+	Test out session with no load component <a href="/no-load">here.</a>
 </p>
 
 {#if session}

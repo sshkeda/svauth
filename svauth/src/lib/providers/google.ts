@@ -1,4 +1,4 @@
-import type { OAuthProvider } from '$lib';
+import type { OAuthProvider, SafeResult, User } from '$lib';
 import { z } from 'zod';
 import * as jose from 'jose';
 
@@ -14,6 +14,10 @@ const googleSchema = z.object({
 	picture: z.string()
 });
 
+const tokenSchema = z.object({
+	id_token: z.string()
+});
+
 /**
  * Svauth Google Provider
  *
@@ -21,71 +25,89 @@ const googleSchema = z.object({
  *
  */
 const Google = ({ clientId, clientSecret }: GoogleConfig): OAuthProvider => {
+	const name = 'google';
+	const scope = 'openid email profile';
+	const authorizationEndpoint = 'https://accounts.google.com/o/oauth2/v2/auth';
+	const tokenEndpoint = 'https://oauth2.googleapis.com/token';
+	const nonce = true;
+	const jwksEndpoint = 'https://www.googleapis.com/oauth2/v3/certs';
+
+	async function verifyToken(idToken: string): Promise<SafeResult<jose.JWTPayload>> {
+		try {
+			const JWKS = jose.createRemoteJWKSet(new URL(jwksEndpoint));
+
+			const decodedToken = await jose.jwtVerify(idToken, JWKS);
+
+			return {
+				ok: true,
+				data: decodedToken.payload
+			};
+		} catch (err) {
+			return {
+				ok: false,
+				error: 'Failed to verify JWT token.'
+			};
+		}
+	}
+
+	async function parseUser(idTokenPayload: jose.JWTPayload): Promise<SafeResult<User>> {
+		try {
+			const googleUser = googleSchema.parse(idTokenPayload);
+
+			const user = {
+				id: googleUser.sub,
+				name: googleUser.name,
+				email: googleUser.email,
+				picture: googleUser.picture
+			};
+
+			return {
+				ok: true,
+				data: user
+			};
+		} catch (err) {
+			return {
+				ok: false,
+				error: 'Failed to parse user info from token.'
+			};
+		}
+	}
+	async function getUser(exchangeResponse: unknown): Promise<SafeResult<User>> {
+		const token = tokenSchema.safeParse(exchangeResponse);
+
+		if (!token.success)
+			return {
+				ok: false,
+				error: 'Invalid token response.'
+			};
+
+		const { id_token } = token.data;
+
+		const idTokenPayload = await verifyToken(id_token);
+
+		if (!idTokenPayload.ok)
+			return {
+				ok: false,
+				error: idTokenPayload.error
+			};
+
+		const user = await parseUser(idTokenPayload.data);
+
+		return user;
+	}
+
 	return {
-		name: 'google',
+		name,
 		clientId,
 		clientSecret,
-		scope: 'openid email profile',
-		authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-		tokenEndpoint: 'https://oauth2.googleapis.com/token',
-		nonce: true,
-		jwksEndpoint: 'https://www.googleapis.com/oauth2/v3/certs',
-		verifyToken: async function (token: string) {
-			try {
-				const JWKS = jose.createRemoteJWKSet(new URL(this.jwksEndpoint as string));
-
-				const decodedToken = await jose.jwtVerify(token, JWKS);
-
-				return {
-					ok: true,
-					data: decodedToken.payload
-				};
-			} catch (err) {
-				return {
-					ok: false,
-					error: 'Failed to verify JWT token.'
-				};
-			}
-		},
-		parseToken: async function (tokenJson: unknown) {
-			const tokenSchema = z.object({
-				id_token: z.string()
-			});
-
-			const parsedToken = tokenSchema.safeParse(tokenJson);
-
-			if (!parsedToken.success)
-				return {
-					ok: false,
-					error: 'Invalid token response.'
-				};
-
-			const { id_token } = parsedToken.data;
-
-			return this.verifyToken(id_token);
-		},
-		parseUser: async function (jwt: jose.JWTPayload) {
-			try {
-				const googleUser = googleSchema.parse(jwt);
-
-				const user = {
-					id: googleUser.sub,
-					name: googleUser.name,
-					email: googleUser.email,
-					picture: googleUser.picture
-				};
-
-				return {
-					ok: true,
-					data: user
-				};
-			} catch (err) {
-				return {
-					ok: false,
-					error: 'Failed to parse user info from token.'
-				};
-			}
-		}
+		scope,
+		authorizationEndpoint,
+		tokenEndpoint,
+		nonce,
+		jwksEndpoint,
+		verifyToken,
+		parseUser,
+		getUser
 	};
 };
 

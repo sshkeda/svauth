@@ -95,7 +95,8 @@ interface ErrorResult {
 	error: string;
 }
 
-type SafeResult<T> = OKResult<T> | ErrorResult;
+// Utility type to represent a result that can be either OK or an error
+export type SafeResult<T> = OKResult<T> | ErrorResult;
 
 export interface OAuthProvider extends Provider {
 	scope: string;
@@ -103,9 +104,9 @@ export interface OAuthProvider extends Provider {
 	tokenEndpoint: string;
 	nonce?: boolean;
 	jwksEndpoint?: string;
-	verifyToken: (token: string) => Promise<SafeResult<jose.JWTPayload>>;
-	parseUser: (jwt: jose.JWTPayload) => Promise<SafeResult<User>>;
-	parseToken: (tokenJson: unknown) => Promise<SafeResult<jose.JWTPayload>>;
+	verifyToken?: (token: string) => Promise<SafeResult<jose.JWTPayload>>;
+	parseUser?: (jwt: jose.JWTPayload) => Promise<SafeResult<User>>;
+	getUser: (exchangeResponse: unknown) => Promise<SafeResult<User>>;
 }
 
 export interface Provider {
@@ -268,25 +269,28 @@ const handlePOST = async (settings: Settings, event: RequestEvent, providers: Pr
 	}
 };
 
-const getToken = async (config: OAuthProvider, code: string): Promise<SafeResult<unknown>> => {
+const exchangeAuthorizationCode = async (
+	code: string,
+	config: OAuthProvider
+): Promise<SafeResult<unknown>> => {
 	try {
-		const tokenEndpoint = new URL(config.tokenEndpoint);
+		const exchangeEndpoint = new URL(config.tokenEndpoint);
 
-		const tokenBody = new URLSearchParams();
+		const exchangeBody = new URLSearchParams();
 
-		tokenBody.set('client_id', config.clientId);
-		tokenBody.set('client_secret', config.clientSecret);
-		tokenBody.set('grant_type', 'authorization_code');
-		tokenBody.set('code', code);
-		tokenBody.set('redirect_uri', `${origin}${base}${SVAUTH_PREFIX}/callback/${config.name}`);
+		exchangeBody.set('client_id', config.clientId);
+		exchangeBody.set('client_secret', config.clientSecret);
+		exchangeBody.set('grant_type', 'authorization_code');
+		exchangeBody.set('code', code);
+		exchangeBody.set('redirect_uri', `${origin}${base}${SVAUTH_PREFIX}/callback/${config.name}`);
 
-		const tokenResponse = await fetch(tokenEndpoint.toString(), {
+		const exchangeResponse = await fetch(exchangeEndpoint.toString(), {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-			body: tokenBody
+			body: exchangeBody
 		});
 
-		if (!tokenResponse.ok) {
+		if (!exchangeResponse.ok) {
 			return {
 				ok: false,
 				error: 'Problem with given authorization code.'
@@ -295,7 +299,7 @@ const getToken = async (config: OAuthProvider, code: string): Promise<SafeResult
 
 		return {
 			ok: true,
-			data: (await tokenResponse.json()) as unknown
+			data: (await exchangeResponse.json()) as unknown
 		};
 	} catch (err) {
 		return {
@@ -319,61 +323,41 @@ const handleGET = async (settings: Settings, event: RequestEvent, providers: Pro
 		return new Response('Invalid Svauth action.', { status: 404 });
 	}
 
-	const providerId = eventPath[2];
+	const provider = eventPath[2];
 
-	if (providerId === 'token') {
-		const token = event.url.searchParams.get('token');
+	let user: SafeResult<User>;
+
+	if (provider === 'token') {
+		const idToken = event.url.searchParams.get('token');
 		const providerId = event.url.searchParams.get('provider');
 
-		if (!token || !providerId) return new Response('Missing parameters.', { status: 404 });
+		if (!idToken || !providerId) return new Response('Missing parameters.', { status: 404 });
 
 		const config = providers[providerId] as OAuthProvider | undefined;
 		if (!config) return new Response('Invalid provider.', { status: 404 });
+		if (!config.verifyToken || !config.parseUser)
+			return new Response('Provider does not support token verification.', { status: 404 });
 
-		const tokenResponse = await config.verifyToken(token);
+		const jwt = await config.verifyToken(idToken);
+		if (!jwt.ok) return new Response(jwt.error, { status: 404 });
 
-		if (!tokenResponse.ok) return new Response(tokenResponse.error, { status: 404 });
+		user = await config.parseUser(jwt.data);
+	} else {
+		const config = providers[provider] as OAuthProvider | undefined;
+		if (!config) return new Response('Invalid provider.', { status: 404 });
 
-		const decodedToken = tokenResponse.data;
+		const authorizationCode = event.url.searchParams.get('code');
+		if (!authorizationCode) return new Response('No authorization code found.', { status: 404 });
 
-		const user = await config.parseUser(decodedToken);
+		const exchangeResponse = await exchangeAuthorizationCode(authorizationCode, config);
+		if (!exchangeResponse.ok) return new Response(exchangeResponse.error, { status: 404 });
 
-		if (!user.ok) return new Response(user.error, { status: 404 });
-
-		const encodedToken = await createSession(user.data, settings.expires);
-
-		const redirectUrl = settings.redirects?.signIn || '/';
-
-		return new Response('signIn', {
-			status: 301,
-			headers: {
-				Location: redirectUrl,
-				'Set-Cookie': `SVAUTH_SESSION=${encodedToken}; Path=/;`
-			}
-		});
+		user = await config.getUser(exchangeResponse.data);
 	}
-
-	const config = providers[providerId] as OAuthProvider | undefined;
-
-	if (!config) return new Response('Invalid provider.', { status: 404 });
-
-	const code = event.url.searchParams.get('code');
-
-	if (!code) return new Response('No authorization code found.', { status: 404 });
-
-	const token = await getToken(config, code);
-
-	if (!token.ok) return new Response(token.error, { status: 404 });
-
-	const userJWT = await config.parseToken(token.data);
-
-	if (!userJWT.ok) return new Response(userJWT.error, { status: 404 });
-
-	const user = await config.parseUser(userJWT.data);
 
 	if (!user.ok) return new Response(user.error, { status: 404 });
 
-	const encodedToken = await createSession(user.data, settings.expires);
+	const encodedSessionToken = await createSession(user.data, settings.expires);
 
 	const redirectUrl = settings.redirects?.signIn || '/';
 
@@ -381,7 +365,7 @@ const handleGET = async (settings: Settings, event: RequestEvent, providers: Pro
 		status: 301,
 		headers: {
 			Location: redirectUrl,
-			'Set-Cookie': `SVAUTH_SESSION=${encodedToken}; Path=/;`
+			'Set-Cookie': `SVAUTH_SESSION=${encodedSessionToken}; Path=/;`
 		}
 	});
 };
