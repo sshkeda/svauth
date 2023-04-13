@@ -3,6 +3,7 @@ import { env } from '$env/dynamic/public';
 import { goto } from '$app/navigation';
 import { BROWSER } from 'esm-env';
 import type { Session } from '$lib';
+import { readable } from 'svelte/store';
 
 export type { Session } from '$lib';
 
@@ -36,7 +37,7 @@ export const signOut = async () => {
 	});
 };
 
-export const getSession = async () => {
+export const fetchSession = async () => {
 	if (BROWSER) {
 		const res = await fetch(
 			env.PUBLIC_SVAUTH_PREFIX ? `${env.PUBLIC_SVAUTH_PREFIX}/session` : '/auth/session'
@@ -53,6 +54,20 @@ export const getSession = async () => {
 			return session;
 		}
 	} else {
-		return null;
+		return undefined;
 	}
 };
+
+/**
+ * A Svelte readable store that holds the current user session information.
+ *
+ * The store has 4 possible values:
+ * - Session: The user's current session.
+ * - null: The credentials are wrong or the session has expired.
+ * - undefined: There is no session.
+ * - false: The session is loading.
+ */
+export const session = readable<Session | null | undefined | false>(false, (set) => {
+	set(false);
+	fetchSession().then((session) => set(session));
+});

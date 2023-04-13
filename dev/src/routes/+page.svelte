@@ -1,15 +1,18 @@
 <script>
 	import { signIn, signOut } from 'svauth/client';
 	import { GoogleSignInButton } from 'svauth/components';
-	export let data;
+	import { page } from '$app/stores';
 
-	$: ({ session } = data);
+	$: session = $page.data.session;
 </script>
 
 <h1>Welcome to svauth's Development SvelteKit Playground</h1>
 <p>
 	Visit <a href="https://github.com/sshkeda/svauth">svauth's github repository</a> to read the svauth
 	documentation
+</p>
+<p>
+	Test out session with no load component <a href="/no-load">here</a>
 </p>
 
 {#if session}

@@ -268,7 +268,7 @@ const handlePOST = async (settings: Settings, event: RequestEvent, providers: Pr
 	}
 };
 
-const getToken = async (config: OAuthProvider, code: string) => {
+const getToken = async (config: OAuthProvider, code: string): Promise<SafeResult<unknown>> => {
 	try {
 		const tokenEndpoint = new URL(config.tokenEndpoint);
 
@@ -286,11 +286,22 @@ const getToken = async (config: OAuthProvider, code: string) => {
 			body: tokenBody
 		});
 
-		if (!tokenResponse.ok) return new Response('Problem with token response.', { status: 404 });
+		if (!tokenResponse.ok) {
+			return {
+				ok: false,
+				error: 'Problem with given authorization code.'
+			};
+		}
 
-		return tokenResponse.json() as unknown;
+		return {
+			ok: true,
+			data: (await tokenResponse.json()) as unknown
+		};
 	} catch (err) {
-		return new Response('Problem with given authorization code.', { status: 404 });
+		return {
+			ok: false,
+			error: 'Problem with given authorization code.'
+		};
 	}
 };
 
@@ -314,9 +325,7 @@ const handleGET = async (settings: Settings, event: RequestEvent, providers: Pro
 		const token = event.url.searchParams.get('token');
 		const providerId = event.url.searchParams.get('provider');
 
-		if (!token || !providerId) {
-			return new Response('Missing parameters.', { status: 404 });
-		}
+		if (!token || !providerId) return new Response('Missing parameters.', { status: 404 });
 
 		const config = providers[providerId] as OAuthProvider | undefined;
 		if (!config) return new Response('Invalid provider.', { status: 404 });
@@ -350,15 +359,13 @@ const handleGET = async (settings: Settings, event: RequestEvent, providers: Pro
 
 	const code = event.url.searchParams.get('code');
 
-	if (!code) {
-		return new Response('No authorization code found.', { status: 404 });
-	}
+	if (!code) return new Response('No authorization code found.', { status: 404 });
 
 	const token = await getToken(config, code);
 
-	if (token instanceof Response) return token;
+	if (!token.ok) return new Response(token.error, { status: 404 });
 
-	const userJWT = await config.parseToken(token);
+	const userJWT = await config.parseToken(token.data);
 
 	if (!userJWT.ok) return new Response(userJWT.error, { status: 404 });
 
@@ -384,6 +391,9 @@ declare global {
 	namespace App {
 		interface Locals {
 			getSession(): Promise<Session | undefined | null>;
+		}
+		interface PageData {
+			session: Session | undefined | null;
 		}
 	}
 }
