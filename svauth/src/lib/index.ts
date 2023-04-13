@@ -124,10 +124,6 @@ interface ProvidersObject {
  */
 interface SvauthOptions {
 	providers: Provider[];
-	redirects?: {
-		signIn?: string;
-		signOut?: string;
-	};
 	expires?: number | string;
 }
 
@@ -141,12 +137,6 @@ const settingsSchema = z.object({
 			})
 			.passthrough()
 	),
-	redirects: z
-		.object({
-			signIn: z.string().optional(),
-			signOut: z.string().optional()
-		})
-		.optional(),
 	expires: z
 		.number()
 		.or(
@@ -256,10 +246,10 @@ const handlePOST = async (settings: Settings, event: RequestEvent, providers: Pr
 		const { providerId } = body;
 		const config = providers[providerId] as OAuthProvider | undefined;
 		if (!config) return new Response('Invalid provider.', { status: 400 });
-		return text(getAuthorizationEndpoint(config));
+		const url = getAuthorizationEndpoint(config);
+		return text(url);
 	} else if (action === 'signOut') {
-		const redirectUrl = settings.redirects?.signOut || '/';
-		return new Response(redirectUrl, {
+		return new Response('Signed out.', {
 			headers: {
 				'Set-Cookie': 'SVAUTH_SESSION=; Path=/; Max-Age=0'
 			}
@@ -359,15 +349,15 @@ const handleGET = async (settings: Settings, event: RequestEvent, providers: Pro
 
 	const encodedSessionToken = await createSession(user.data, settings.expires);
 
-	const redirectUrl = settings.redirects?.signIn || '/';
+	const redirect = event.cookies.get('SVAUTH_SIGNIN_REDIRECT') || '/';
 
-	return new Response('signIn', {
-		status: 301,
-		headers: {
-			Location: redirectUrl,
-			'Set-Cookie': `SVAUTH_SESSION=${encodedSessionToken}; Path=/;`
-		}
+	const response = new Response('Signed in.', {
+		status: 301
 	});
+	response.headers.append('Set-Cookie', `SVAUTH_SESSION=${encodedSessionToken}; Path=/;`);
+	response.headers.append('Set-Cookie', 'SVAUTH_SIGNIN_REDIRECT=; Path=/; Max-Age=0');
+	response.headers.append('Location', redirect);
+	return response;
 };
 
 declare global {

@@ -1,13 +1,16 @@
 type ProviderId = 'google' | 'discord';
 import { env } from '$env/dynamic/public';
-import { goto } from '$app/navigation';
+import { goto, invalidateAll } from '$app/navigation';
 import { BROWSER } from 'esm-env';
 import type { Session } from '$lib';
 import { readable } from 'svelte/store';
 
 export type { Session } from '$lib';
 
-export const signIn = async (providerId: ProviderId) => {
+export const signIn = async (
+	providerId: ProviderId,
+	redirectUrl: string = window.location.pathname
+) => {
 	const res = await fetch(env.PUBLIC_SVAUTH_PREFIX || '/auth', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
@@ -18,10 +21,15 @@ export const signIn = async (providerId: ProviderId) => {
 
 	const url = new URL(await res.text());
 
+	// Because redirectUrl is lost when the user is redirected to the OAuth provider,
+	// I set it as a temporary cookie so that Svauth server can read it when the user is redirected back from OAuth.
+
+	document.cookie = `SVAUTH_SIGNIN_REDIRECT=${redirectUrl}; path=/; max-age=360`;
+
 	(window as Window).location = url.toString();
 };
 
-export const signOut = async () => {
+export const signOut = async (redirectUrl?: string) => {
 	const res = await fetch(env.PUBLIC_SVAUTH_PREFIX || '/auth', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
@@ -30,11 +38,13 @@ export const signOut = async () => {
 
 	if (!res.ok) throw new Error(res.statusText);
 
-	const url = await res.text();
-
-	goto(url, {
-		invalidateAll: true
-	});
+	if (redirectUrl) {
+		await goto(redirectUrl, {
+			invalidateAll: true
+		});
+	} else {
+		await invalidateAll();
+	}
 };
 
 export const fetchSession = async () => {
