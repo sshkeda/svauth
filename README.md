@@ -5,7 +5,7 @@
 Authentication for SvelteKit
 Developed by Stephen Shkeda <stephenshkeda@gmail.com>
 
-## Example
+## Get Started
 
 ### Add Svauth Handler
 
@@ -25,7 +25,7 @@ export const handle = Svauth({
 });
 ```
 
-### Add Svauth Session to page
+### Example 1: Get Session During Page Load
 
 ```typescript
 // routes/+page.server.ts
@@ -38,25 +38,39 @@ export const load = (async (event) => {
 }) satisfies PageServerLoad;
 ```
 
-### Add Svelte Hook
-
 ```svelte
 <script>
-    // pages/+page.svelte
-
+  // routes/+page.svelte
 	import { signIn, signOut } from 'svauth/client';
+	import { GoogleSignInButton } from 'svauth/components';
+	import { page } from '$app/stores';
 
-	export let data;
-
-	$: ({ session } = data);
+	$: session = $page.data.session;
 </script>
 
 {#if session}
 	<button on:click={() => signOut()}> Sign out </button>
 	<p>Logged in as {session.user.email}</p>
-	<p>Expires on {session.expires.toUTCString()}</p>
 {:else}
-	<button on:click={() => signIn('google')}> Sign in </button>
+	<GoogleSignInButton />
+	<button on:click={() => signIn('google')}> Google sign in </button>
+	<button on:click={() => signIn('discord')}> Discord sign in </button>
+	<p>Not signed in</p>
+{/if}
+```
+
+### Example 2: Get Session With Client
+
+```svelte
+<script lang="ts">
+	import { session, signIn, signOut } from 'svauth/client';
+</script>
+
+{#if $session}
+	<button on:click={() => signOut()}> Sign out </button>
+	<p>Logged in as {$session.user.email}</p>
+{:else}
+	<button on:click={() => signIn('google')}> Google sign in </button>
 	<p>Not signed in</p>
 {/if}
 ```
