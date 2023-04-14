@@ -1,11 +1,11 @@
-type ProviderId = 'google' | 'discord';
 import { env } from '$env/dynamic/public';
 import { goto } from '$app/navigation';
 import { BROWSER } from 'esm-env';
 import type { Session } from '$lib';
 import { writable } from 'svelte/store';
-
 export type { Session } from '$lib';
+
+type ProviderId = 'google' | 'discord' | 'github';
 
 export const signIn = async (
 	providerId: ProviderId,

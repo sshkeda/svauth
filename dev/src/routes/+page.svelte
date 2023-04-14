@@ -25,6 +25,7 @@
 	<GoogleSignInButton />
 	<button on:click={() => signIn('google')}> Google sign in </button>
 	<button on:click={() => signIn('discord')}> Discord sign in </button>
+	<button on:click={() => signIn('github')}>GitHub sign in</button>
 	<p>Not signed in</p>
 {/if}
 

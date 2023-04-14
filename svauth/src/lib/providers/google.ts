@@ -28,7 +28,7 @@ const Google = ({ clientId, clientSecret }: GoogleConfig): OAuthProvider => {
 	const name = 'google';
 	const scope = 'openid email profile';
 	const authorizationEndpoint = 'https://accounts.google.com/o/oauth2/v2/auth';
-	const tokenEndpoint = 'https://oauth2.googleapis.com/token';
+	const exchangeEndpoint = 'https://oauth2.googleapis.com/token';
 	const nonce = true;
 	const jwksEndpoint = 'https://www.googleapis.com/oauth2/v3/certs';
 
@@ -102,7 +102,7 @@ const Google = ({ clientId, clientSecret }: GoogleConfig): OAuthProvider => {
 		clientSecret,
 		scope,
 		authorizationEndpoint,
-		tokenEndpoint,
+		exchangeEndpoint,
 		nonce,
 		jwksEndpoint,
 		verifyToken,

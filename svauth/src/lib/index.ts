@@ -101,8 +101,9 @@ export type SafeResult<T> = OKResult<T> | ErrorResult;
 export interface OAuthProvider extends Provider {
 	scope: string;
 	authorizationEndpoint: string;
-	tokenEndpoint: string;
+	exchangeEndpoint: string;
 	nonce?: boolean;
+	state?: boolean;
 	jwksEndpoint?: string;
 	verifyToken?: (token: string) => Promise<SafeResult<jose.JWTPayload>>;
 	parseUser?: (jwt: jose.JWTPayload) => Promise<SafeResult<User>>;
@@ -162,6 +163,9 @@ const getAuthorizationEndpoint = (config: OAuthProvider) => {
 	authorizationEndpoint.searchParams.set('scope', config.scope);
 	if (config.nonce)
 		authorizationEndpoint.searchParams.set('nonce', crypto.randomBytes(32).toString('hex'));
+
+	if (config.state)
+		authorizationEndpoint.searchParams.set('state', crypto.randomBytes(32).toString('hex'));
 
 	return authorizationEndpoint.toString();
 };
@@ -264,7 +268,7 @@ const exchangeAuthorizationCode = async (
 	config: OAuthProvider
 ): Promise<SafeResult<unknown>> => {
 	try {
-		const exchangeEndpoint = new URL(config.tokenEndpoint);
+		const exchangeEndpoint = new URL(config.exchangeEndpoint);
 
 		const exchangeBody = new URLSearchParams();
 
@@ -276,7 +280,7 @@ const exchangeAuthorizationCode = async (
 
 		const exchangeResponse = await fetch(exchangeEndpoint.toString(), {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+			headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
 			body: exchangeBody
 		});
 
@@ -292,6 +296,7 @@ const exchangeAuthorizationCode = async (
 			data: (await exchangeResponse.json()) as unknown
 		};
 	} catch (err) {
+		console.log(err);
 		return {
 			ok: false,
 			error: 'Problem with exchanging authorization code.'
