@@ -283,7 +283,7 @@ const exchangeAuthorizationCode = async (
 		if (!exchangeResponse.ok) {
 			return {
 				ok: false,
-				error: 'Problem with given authorization code.'
+				error: 'Problem with exchanging authorization code.'
 			};
 		}
 
@@ -294,7 +294,7 @@ const exchangeAuthorizationCode = async (
 	} catch (err) {
 		return {
 			ok: false,
-			error: 'Problem with given authorization code.'
+			error: 'Problem with exchanging authorization code.'
 		};
 	}
 };
@@ -306,7 +306,9 @@ const handleGET = async (settings: Settings, event: RequestEvent, providers: Pro
 
 	if (action === 'session') {
 		const session = await getSession(event, settings.expires);
-		return json(session);
+		return json({
+			session
+		});
 	}
 
 	if (action !== 'callback') {

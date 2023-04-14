@@ -1,9 +1,9 @@
 type ProviderId = 'google' | 'discord';
 import { env } from '$env/dynamic/public';
-import { goto, invalidateAll } from '$app/navigation';
+import { goto } from '$app/navigation';
 import { BROWSER } from 'esm-env';
 import type { Session } from '$lib';
-import { readable } from 'svelte/store';
+import { writable } from 'svelte/store';
 
 export type { Session } from '$lib';
 
@@ -29,7 +29,7 @@ export const signIn = async (
 	(window as Window).location = url.toString();
 };
 
-export const signOut = async (redirectUrl?: string) => {
+export const signOut = async (redirectUrl: string = window.location.pathname) => {
 	const res = await fetch(env.PUBLIC_SVAUTH_PREFIX || '/auth', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
@@ -38,16 +38,13 @@ export const signOut = async (redirectUrl?: string) => {
 
 	if (!res.ok) throw new Error(res.statusText);
 
-	if (redirectUrl) {
-		await goto(redirectUrl, {
-			invalidateAll: true
-		});
-	} else {
-		await invalidateAll();
-	}
+	session.set(undefined);
+	await goto(redirectUrl, {
+		invalidateAll: true
+	});
 };
 
-export const fetchSession = async () => {
+export const fetchSession = async (): Promise<Session | null | undefined> => {
 	if (BROWSER) {
 		const res = await fetch(
 			env.PUBLIC_SVAUTH_PREFIX ? `${env.PUBLIC_SVAUTH_PREFIX}/session` : '/auth/session'
@@ -55,7 +52,10 @@ export const fetchSession = async () => {
 
 		if (!res.ok) throw new Error(res.statusText);
 
-		const session = await res.json();
+		const data = await res.json();
+
+		const { session } = data;
+
 		if (session) {
 			session.expires = new Date(session.expires);
 			session.issuedAt = new Date(session.issuedAt);
@@ -69,7 +69,7 @@ export const fetchSession = async () => {
 };
 
 /**
- * A Svelte readable store that holds the current user session information.
+ * A Svelte writable store that holds the current user session information.
  *
  * The store has 4 possible values:
  * - Session: The user's current session.
@@ -77,7 +77,6 @@ export const fetchSession = async () => {
  * - undefined: There is no session.
  * - false: The session is loading.
  */
-export const session = readable<Session | null | undefined | false>(false, (set) => {
-	set(false);
+export const session = writable<Session | null | undefined | false>(false, (set) => {
 	fetchSession().then((session) => set(session));
 });
