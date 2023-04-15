@@ -25,7 +25,7 @@ export const handle = Svauth({
 });
 ```
 
-### Example 1: Get Session During Page Load
+### 2. (Optional) Get Session During Load
 
 ```typescript
 // routes/+page.server.ts
@@ -38,28 +38,7 @@ export const load = (async (event) => {
 }) satisfies PageServerLoad;
 ```
 
-```svelte
-<script>
-  // routes/+page.svelte
-	import { signIn, signOut } from 'svauth/client';
-	import { GoogleSignInButton } from 'svauth/components';
-	import { page } from '$app/stores';
-
-	$: session = $page.data.session;
-</script>
-
-{#if session}
-	<button on:click={() => signOut()}> Sign out </button>
-	<p>Logged in as {session.user.email}</p>
-{:else}
-	<GoogleSignInButton />
-	<button on:click={() => signIn('google')}> Google sign in </button>
-	<button on:click={() => signIn('discord')}> Discord sign in </button>
-	<p>Not signed in</p>
-{/if}
-```
-
-### Example 2: Get Session With Client
+### 3. Import Session
 
 ```svelte
 <script lang="ts">

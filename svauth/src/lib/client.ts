@@ -1,9 +1,8 @@
 import { env } from '$env/dynamic/public';
-import { goto } from '$app/navigation';
 import { BROWSER } from 'esm-env';
 import type { Session } from '$lib';
 import { writable } from 'svelte/store';
-export type { Session } from '$lib';
+import { page } from '$app/stores';
 
 type ProviderId = 'google' | 'discord' | 'github';
 
@@ -13,9 +12,7 @@ export const signIn = async (
 ) => {
 	document.cookie = `SVAUTH_SIGNIN_REDIRECT=${redirectUrl}; path=/; max-age=360`;
 
-	await goto(`${env.PUBLIC_SVAUTH_PREFIX || '/auth'}/signin/${providerId}`, {
-		invalidateAll: true
-	});
+	(window as Window).location = `${env.PUBLIC_SVAUTH_PREFIX || '/auth'}/signin/${providerId}`;
 };
 
 export const signOut = async (redirectUrl: string = window.location.pathname) => {
@@ -28,9 +25,8 @@ export const signOut = async (redirectUrl: string = window.location.pathname) =>
 	if (!res.ok) throw new Error(res.statusText);
 
 	session.set(undefined);
-	await goto(redirectUrl, {
-		invalidateAll: true
-	});
+
+	(window as Window).location = redirectUrl;
 };
 
 export const fetchSession = async (): Promise<Session | null | undefined> => {
@@ -67,5 +63,11 @@ export const fetchSession = async (): Promise<Session | null | undefined> => {
  * - false: The session is loading.
  */
 export const session = writable<Session | null | undefined | false>(false, (set) => {
-	fetchSession().then((session) => set(session));
+	page.subscribe((page) => {
+		if ('session' in page.data) {
+			set(page.data.session);
+		} else {
+			fetchSession().then((session) => set(session));
+		}
+	});
 });
