@@ -1,7 +1,7 @@
 import { base } from '$app/paths';
 import { getSession, type OAuthProvider, type Settings, type User } from '$lib';
 import type { SafeResult } from '$lib/utils/types';
-import { json, type RequestEvent } from '@sveltejs/kit';
+import { json, text, type RequestEvent } from '@sveltejs/kit';
 import * as jose from 'jose';
 import { z } from 'zod';
 import crypto from 'crypto';
@@ -66,7 +66,8 @@ const exchangeAuthorizationCode = async (
 const eventPathSchema = z.union([
 	z.tuple([z.literal('callback'), z.string()]),
 	z.tuple([z.literal('session')]),
-	z.tuple([z.literal('signin'), z.string()])
+	z.tuple([z.literal('signin'), z.string()]),
+	z.tuple([z.literal('client_id'), z.literal('google')])
 ]);
 
 const handleGET = async (event: RequestEvent, settings: Settings) => {
@@ -87,6 +88,10 @@ const handleGET = async (event: RequestEvent, settings: Settings) => {
 		return json({
 			session
 		});
+	}
+
+	if (action === 'client_id') {
+		return text(settings.providers.google.clientId);
 	}
 
 	const provider = eventPath.data[1];

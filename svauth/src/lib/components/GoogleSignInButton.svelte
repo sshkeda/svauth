@@ -3,6 +3,8 @@
 	import { goto } from '$app/navigation';
 	import { env } from '$env/dynamic/public';
 
+	const prefix = env.PUBLIC_SVAUTH_PREFIX || '/auth';
+
 	let googleScript: HTMLScriptElement;
 
 	export let oneTap: boolean = false;
@@ -34,10 +36,13 @@
 			goto('/auth/callback/token/?provider=google&token=' + token);
 		};
 
-		const initializeGoogle = () => {
+		const initializeGoogle = async () => {
+			const client_id = await fetch(`${prefix}/client_id/google`).then((res) => res.text());
+			console.log(client_id);
+
 			// @ts-ignore
 			google.accounts.id.initialize({
-				client_id: env.PUBLIC_GOOGLE_CLIENT_ID,
+				client_id,
 				callback: handleCredentialResponse
 			});
 			const googleButtonDiv = document.getElementById('googleButtonDiv');

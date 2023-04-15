@@ -6,17 +6,19 @@ import { page } from '$app/stores';
 
 type ProviderId = 'google' | 'discord' | 'github';
 
+const prefix = env.PUBLIC_SVAUTH_PREFIX || '/auth';
+
 export const signIn = async (
 	providerId: ProviderId,
 	redirectUrl: string = window.location.pathname
 ) => {
 	document.cookie = `SVAUTH_SIGNIN_REDIRECT=${redirectUrl}; path=/; max-age=360`;
 
-	(window as Window).location = `${env.PUBLIC_SVAUTH_PREFIX || '/auth'}/signin/${providerId}`;
+	(window as Window).location = `${prefix}/signin/${providerId}`;
 };
 
 export const signOut = async (redirectUrl: string = window.location.pathname) => {
-	const res = await fetch(env.PUBLIC_SVAUTH_PREFIX || '/auth', {
+	const res = await fetch(prefix, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ action: 'signOut' })
@@ -31,9 +33,7 @@ export const signOut = async (redirectUrl: string = window.location.pathname) =>
 
 export const fetchSession = async (): Promise<Session | null | undefined> => {
 	if (BROWSER) {
-		const res = await fetch(
-			env.PUBLIC_SVAUTH_PREFIX ? `${env.PUBLIC_SVAUTH_PREFIX}/session` : '/auth/session'
-		);
+		const res = await fetch(`${prefix}/session`);
 
 		if (!res.ok) throw new Error(res.statusText);
 
