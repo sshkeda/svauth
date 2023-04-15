@@ -28,6 +28,7 @@
 		"vite": "^4.2.0"
 	},
 	"dependencies": {
+		"@sveltejs/adapter-vercel": "^2.4.1",
 		"svauth": "workspace:*"
 	},
 	"type": "module"

@@ -1,4 +1,5 @@
-import type { OAuthProvider, SafeResult, User } from '$lib';
+import type { OAuthProvider, User } from '$lib';
+import type { SafeResult } from '$lib/utils/types';
 import { z } from 'zod';
 
 interface GitHubConfig {
@@ -82,6 +83,7 @@ const GitHub = ({ clientId, clientSecret }: GitHubConfig): OAuthProvider => {
 				data: user
 			};
 		} catch (err) {
+			console.log(err);
 			return {
 				ok: false,
 				error: 'Failed to parse user info from token.'

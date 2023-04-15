@@ -1,4 +1,5 @@
-import type { OAuthProvider, SafeResult, User } from '$lib';
+import type { OAuthProvider, User } from '$lib';
+import type { SafeResult } from '$lib/utils/types';
 import { z } from 'zod';
 
 interface DiscordConfig {

@@ -11,22 +11,11 @@ export const signIn = async (
 	providerId: ProviderId,
 	redirectUrl: string = window.location.pathname
 ) => {
-	const res = await fetch(env.PUBLIC_SVAUTH_PREFIX || '/auth', {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ action: 'signIn', body: { providerId } })
-	});
-
-	if (!res.ok) throw new Error(res.statusText);
-
-	const url = new URL(await res.text());
-
-	// Because redirectUrl is lost when the user is redirected to the OAuth provider,
-	// I set it as a temporary cookie so that Svauth server can read it when the user is redirected back from OAuth.
-
 	document.cookie = `SVAUTH_SIGNIN_REDIRECT=${redirectUrl}; path=/; max-age=360`;
 
-	(window as Window).location = url.toString();
+	await goto(`${env.PUBLIC_SVAUTH_PREFIX || '/auth'}/signin/${providerId}`, {
+		invalidateAll: true
+	});
 };
 
 export const signOut = async (redirectUrl: string = window.location.pathname) => {
