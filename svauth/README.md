@@ -116,17 +116,18 @@ export const load = (async (event) => {
 - **Serverless** - Designed to work with serverless environments.
 - **Session Management** - Built-in session management for server and client-side rendering.
 - **TypeScript** - Written in TypeScript and includes type definitions.
-- **Security** - CSRF protection, JWT encryption, and more.
+- **Security** - Designed to be secure by default and encourage best practices for safeguarding user data.
 - **Customizable Components** - Pre-built, customizable components like the SignInWithGoogleButton for a smoother user authentication experience.
 
 ## Security
 
-I request that you please contact me directly via my email, stephenshkeda@gmail.com, to report serious issues that might impact the security of sites using svauth.
-
 - **CSRF Protection** - SvelteKit's built-in CSRF protection is used to prevent CSRF attacks.
-- **JWT Encryption** - When JSON Web Tokens are enabled, they are encrypted by default (JWE) with A256GCM
-- **Client Independence** - Doesn't rely on client-side JavaScript
-- **Secure Cookie Management** - Signed, prefixed, server-only cookies
+- **JWT Encryption** - When JSON Web Tokens are enabled, they are encrypted by default (JWE) with A256GCM.
+- **Client Independence** - Doesn't rely on client-side JavaScript.
+- **Secure Cookie Management** - Signed, prefixed, server-only cookies.
+- **OWASP Compliance** - Attempts to implement the latest guidance published by [Open Web Application Security Project](https://owasp.org/).
+
+Please contact me directly, stephenshkeda@gmail.com, to report serious issues that might impact the security of sites using svauth.
 
 ## Environment Variables
 
