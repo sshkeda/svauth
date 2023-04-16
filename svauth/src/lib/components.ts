@@ -1,3 +1,3 @@
-import GoogleSignInButton from './components/GoogleSignInButton.svelte';
+import SignInWithGoogleButton from './components/SignInWithGoogleButton.svelte';
 
-export { GoogleSignInButton };
+export { SignInWithGoogleButton };

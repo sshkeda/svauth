@@ -1,6 +1,6 @@
 <script>
 	import { signIn, signOut, session } from 'svauth/client';
-	import { GoogleSignInButton } from 'svauth/components';
+	import { SignInWithGoogleButton } from 'svauth/components';
 </script>
 
 <h1>Welcome to svauth's Development SvelteKit Playground</h1>
@@ -19,7 +19,7 @@
 	<img src={$session.user.picture} alt="User profile" referrerpolicy="no-referrer" />
 	<p>Token expires on {$session.expires.toUTCString()}</p>
 {:else}
-	<GoogleSignInButton />
+	<SignInWithGoogleButton />
 	<button on:click={() => signIn('google')}> Google sign in </button>
 	<button on:click={() => signIn('discord')}> Discord sign in </button>
 	<button on:click={() => signIn('github')}>GitHub sign in</button>

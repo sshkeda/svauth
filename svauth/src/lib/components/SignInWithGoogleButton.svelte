@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { env } from '$env/dynamic/public';
+	import { BROWSER } from 'esm-env';
 
 	const prefix = env.PUBLIC_SVAUTH_PREFIX || '/auth';
 
@@ -10,21 +11,16 @@
 	export let oneTap: boolean = false;
 
 	// https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/types/google-one-tap/index.d.ts
-	interface GsiButtonConfiguration {
-		type?: 'standard' | 'icon';
-		theme?: 'outline' | 'filled_blue' | 'filled_black';
-		size?: 'large' | 'medium' | 'small';
-		text?: 'signin_with' | 'signup_with' | 'continue_with' | 'signin';
-		shape?: 'rectangular' | 'pill' | 'circle' | 'square';
-		logo_alignment?: 'left' | 'center';
-		width?: number;
-		locale?: string;
-	}
+	// https://developers.google.com/identity/gsi/web/reference/js-reference#GsiButtonConfiguration
 
-	export let config: GsiButtonConfiguration = {
-		theme: 'outline',
-		size: 'large'
-	};
+	export let type: 'standard' | 'icon' = 'standard';
+	export let theme: 'outline' | 'filled_blue' | 'filled_black' = 'outline';
+	export let size: 'large' | 'medium' | 'small' = 'large';
+	export let text: 'signin_with' | 'signup_with' | 'continue_with' | 'signin' = 'signin_with';
+	export let shape: 'rectangular' | 'pill' | 'circle' | 'square' = 'rectangular';
+	export let logo_alignment: 'left' | 'center' = 'left';
+	export let width: number | undefined = undefined;
+	export let locale: string | undefined = undefined;
 
 	onMount(async () => {
 		interface CredentialResponse {
@@ -50,7 +46,16 @@
 				throw new Error('googleButtonDiv not found');
 			}
 			// @ts-ignore
-			google.accounts.id.renderButton(googleButtonDiv, config);
+			google.accounts.id.renderButton(googleButtonDiv, {
+				type,
+				theme,
+				size,
+				text,
+				shape,
+				width,
+				logo_alignment,
+				locale
+			});
 
 			if (oneTap) {
 				// @ts-ignore

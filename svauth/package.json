@@ -1,6 +1,11 @@
 {
 	"name": "svauth",
 	"version": "0.1.0",
+	"license": "ISC",
+	"description": "Authentication for SvelteKit",
+	"homepage": "https://github.com/sshkeda/svauth",
+	"repository": "https://github.com/sshkeda/svauth",
+	"author": "Stephen Shkeda <stephenshkeda@gmail.com>",
 	"scripts": {
 		"dev": "svelte-package -w",
 		"build": "vite build && npm run package",
