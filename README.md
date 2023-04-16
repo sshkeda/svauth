@@ -1,1 +1,1 @@
-svauth/README.md
+./svauth/README.md
