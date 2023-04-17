@@ -28,7 +28,9 @@
 		"vite": "^4.2.0"
 	},
 	"dependencies": {
+		"@prisma/client": "^4.12.0",
 		"@sveltejs/adapter-vercel": "^2.4.1",
+		"prisma": "^4.12.0",
 		"svauth": "workspace:*"
 	},
 	"type": "module"

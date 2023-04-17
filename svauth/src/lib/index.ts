@@ -33,6 +33,40 @@ const getOrigin = () => {
 	return SVAUTH_URL;
 };
 
+const origin = getOrigin();
+
+// ------------------------------------------------------------------------------------------------------------
+
+export const getSession = async (event: RequestEvent, settings: Settings) => {
+	const sessionCookie = event.cookies.get('SVAUTH_SESSION');
+	if (!sessionCookie) return undefined;
+	try {
+		if (settings.adapter) {
+			const session = await settings.adapter.getSession(sessionCookie, settings);
+			return session;
+		}
+		const unparsedTokenSession = await jose.jwtDecrypt(sessionCookie, SVAUTH_SECRET);
+
+		const tokenSession = sessionTokenSchema.parse(unparsedTokenSession.payload);
+
+		const encodedToken = await new jose.EncryptJWT(tokenSession)
+			.setProtectedHeader({ alg: 'dir', enc: 'A256GCM' })
+			.setExpirationTime(settings.expires)
+			.encrypt(SVAUTH_SECRET);
+
+		event.cookies.set('SVAUTH_SESSION', encodedToken, {
+			path: '/'
+		});
+
+		const session = sessionSchema.parse(tokenSession);
+
+		return session;
+	} catch (error) {
+		event.cookies.delete('SVAUTH_SESSION');
+		return null;
+	}
+};
+
 const userSchema = z.object({
 	id: z.string(),
 	name: z.string(),
@@ -66,23 +100,12 @@ const sessionSchema = z
 
 export type Session = z.infer<typeof sessionSchema>;
 
-export interface OAuthProvider extends Provider {
-	scope: string;
-	authorizationEndpoint: string;
-	exchangeEndpoint: string;
-	nonce?: boolean;
-	state?: boolean;
-	jwksEndpoint?: string;
-	verifyToken?: (token: string) => Promise<SafeResult<jose.JWTPayload>>;
-	parseUser?: (jwt: jose.JWTPayload) => Promise<SafeResult<User>>;
-	getUser: (exchangeResponse: unknown) => Promise<SafeResult<User>>;
-}
-
 /**
  * @param {expires} expires maximum age of session in milliseconds. Defaults to 30 days.
  */
 interface SvauthOptions {
 	providers: Provider[];
+	adapter?: Adapter;
 	expires?: number | string;
 }
 
@@ -96,6 +119,26 @@ const providerSchema = z
 
 export type Provider = z.infer<typeof providerSchema>;
 
+export interface OAuthProvider extends Provider {
+	scope: string;
+	authorizationEndpoint: string;
+	exchangeEndpoint: string;
+	nonce?: boolean;
+	state?: boolean;
+	jwksEndpoint?: string;
+	verifyToken?: (token: string) => Promise<SafeResult<jose.JWTPayload>>;
+	parseUser?: (jwt: jose.JWTPayload) => Promise<SafeResult<User>>;
+	getUser: (exchangeResponse: unknown) => Promise<SafeResult<User>>;
+}
+
+export interface Adapter {
+	type: string;
+	handleAccount(user: User, provider: Provider): Promise<SafeResult<User>>;
+	createSession(user: User, settings: Settings): Promise<SafeResult<string>>;
+	getSession(sessionToken: string, settings: Settings): Promise<Session | undefined | null>;
+	deleteSession(sessionToken: string, settings: Settings): Promise<boolean>;
+}
+
 const expiresSchema = z.number().or(
 	z
 		.number()
@@ -108,64 +151,26 @@ const expiresSchema = z.number().or(
 		.default('30d')
 );
 
-const adapterSchema = z.object({
-	url: z.string(),
-	secret: z.string()
-});
-
-const strategySchema = z.union([z.literal('jwt'), z.literal('adapter')]);
-
 const settingsSchema = z
 	.object({
 		providers: z.array(providerSchema),
-		expires: expiresSchema,
-		adapter: adapterSchema.optional(),
-		strategy: strategySchema.optional()
+		expires: expiresSchema
 	})
+	.passthrough()
 	.transform((settings) => {
 		return {
 			providers: Object.fromEntries(
 				settings.providers.map((provider) => [provider.name, provider])
 			),
 			expires: settings.expires,
-			adapter: settings.adapter,
-			strategy: settings.strategy || (settings.adapter ? 'adapter' : 'jwt'),
+			adapter: (settings.adapter as Adapter) || undefined,
 			prefix: publicEnv.PUBLIC_SVAUTH_PREFIX || '/auth',
-			origin: getOrigin(),
+			origin,
 			secret: SVAUTH_SECRET
 		};
 	});
 
 export type Settings = z.infer<typeof settingsSchema>;
-
-export const getSession = async (event: RequestEvent, expires: number | string) => {
-	const sessionCookie = event.cookies.get('SVAUTH_SESSION');
-	if (!sessionCookie) return undefined;
-	try {
-		const unparsedTokenSession = await jose.jwtDecrypt(sessionCookie, SVAUTH_SECRET);
-
-		const tokenSession = sessionTokenSchema.parse(unparsedTokenSession.payload);
-
-		const encodedToken = await encryptJWT(tokenSession, expires);
-
-		event.cookies.set('SVAUTH_SESSION', encodedToken, {
-			path: '/'
-		});
-
-		const session = sessionSchema.parse(tokenSession);
-
-		return session;
-	} catch (error) {
-		event.cookies.delete('SVAUTH_SESSION');
-		return null;
-	}
-};
-
-const encryptJWT = (payload: jose.JWTPayload, expires: string | number) =>
-	new jose.EncryptJWT(payload)
-		.setProtectedHeader({ alg: 'dir', enc: 'A256GCM' })
-		.setExpirationTime(expires)
-		.encrypt(SVAUTH_SECRET);
 
 const Svauth = (options: SvauthOptions): Handle => {
 	const settings = settingsSchema.parse(options);
@@ -173,7 +178,7 @@ const Svauth = (options: SvauthOptions): Handle => {
 	return (async ({ event, resolve }) => {
 		if (event.url.pathname.startsWith(settings.prefix)) {
 			if (event.request.method === 'POST') {
-				return await handlePOST(event);
+				return await handlePOST(event, settings);
 			} else if (event.request.method === 'GET') {
 				return await handleGET(event, settings);
 			}
@@ -182,7 +187,7 @@ const Svauth = (options: SvauthOptions): Handle => {
 			});
 		}
 
-		event.locals.getSession = () => getSession(event, settings.expires);
+		event.locals.getSession = () => getSession(event, settings);
 		const response = await resolve(event);
 		return response;
 	}) satisfies Handle;

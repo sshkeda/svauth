@@ -1,5 +1,7 @@
 import Svauth from 'svauth';
 import { Google, Discord, GitHub } from 'svauth/providers';
+import { Prisma } from 'svauth/adapters';
+import prisma from './server/prisma';
 import {
 	GOOGLE_CLIENT_ID,
 	GOOGLE_CLIENT_SECRET,
@@ -24,5 +26,6 @@ export const handle = Svauth({
 			clientSecret: GITHUB_CLIENT_SECRET
 		})
 	],
+	adapter: Prisma(prisma),
 	expires: '30d'
 });

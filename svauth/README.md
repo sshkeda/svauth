@@ -33,6 +33,8 @@
   - [Google](#google)
   - [Discord](#discord)
   - [GitHub](#github)
+- [Adapters](#adapters)
+  - [Prisma](#prisma)
 - [Components](#components)
   - [SignInWithGoogleButton](#signinwithgooglebutton)
 - [License](#license)
@@ -158,6 +160,7 @@ The `Svauth` function is used to create the Svauth handler.
 | Name        | Type                 | Default | Description                                                                                                                                                                           |
 | ----------- | -------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `providers` | `Provider[]`         |         | An array of providers.                                                                                                                                                                |
+| `adapter`   | `Adapter`            |         | The adapter to link svauth with a database.                                                                                                                                           |
 | `expires`   | `number` \| `string` | `30d`   | The expiration time of the session. When number is passed that is used as a value in seconds, when string is passed it is resolved to a time span and added to the current timestamp. |
 
 #### Example
@@ -407,6 +410,80 @@ export const handle = Svauth({
 		})
 	]
 });
+```
+
+## Adapters
+
+### Prisma
+
+#### Documentation
+
+https://www.prisma.io/
+
+#### Example
+
+```typescript
+// routes/hooks.server.ts
+import Svauth from 'svauth';
+import { Google } from 'svauth/providers';
+import { Prisma } from 'svauth/adapters';
+import prisma from './server/prisma';
+import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } from '$env/static/private';
+
+export const handle = Svauth({
+	providers: [
+		Google({
+			clientId: GOOGLE_CLIENT_ID,
+			clientSecret: GOOGLE_CLIENT_SECRET
+		})
+	],
+	adapter: Prisma(prisma)
+});
+```
+
+#### Schema
+
+```prisma
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider     = "mysql"
+  url          = env("DATABASE_URL")
+  relationMode = "prisma"
+}
+
+model Account {
+  id                String @id @default(cuid())
+  userId            String
+  provider          String
+  providerAccountId String
+  user              User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id       String   @id @default(cuid())
+  userId   String
+  issuedAt DateTime @default(now())
+  expires  DateTime
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model User {
+  id       String    @id @default(cuid())
+  name     String
+  email    String    @unique
+  picture  String
+  accounts Account[]
+  sessions Session[]
+}
 ```
 
 ## Components

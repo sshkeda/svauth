@@ -1,11 +1,22 @@
 {
 	"name": "svauth",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"license": "ISC",
 	"description": "Authentication for SvelteKit",
 	"homepage": "https://github.com/sshkeda/svauth",
 	"repository": "https://github.com/sshkeda/svauth",
 	"author": "Stephen Shkeda <stephenshkeda@gmail.com>",
+	"keywords": [
+		"svelte",
+		"nodejs",
+		"oauth",
+		"jwt",
+		"oauth2",
+		"authentication",
+		"sveltekit",
+		"oidc",
+		"svauth"
+	],
 	"scripts": {
 		"dev": "svelte-package -w",
 		"build": "vite build && npm run package",
@@ -33,6 +44,10 @@
 		"./components": {
 			"types": "./dist/components.d.ts",
 			"default": "./dist/components.js"
+		},
+		"./adapters": {
+			"types": "./dist/adapters.d.ts",
+			"default": "./dist/adapters.js"
 		}
 	},
 	"typesVersions": {
@@ -45,6 +60,9 @@
 			],
 			"components": [
 				"./dist/components.d.ts"
+			],
+			"adapters": [
+				"./dist/adapters.d.ts"
 			]
 		}
 	},
@@ -77,6 +95,8 @@
 	"types": "./dist/index.d.ts",
 	"type": "module",
 	"dependencies": {
+		"@paralleldrive/cuid2": "^2.2.0",
+		"@prisma/client": "^4.12.0",
 		"esm-env": "^1.0.0",
 		"jose": "^4.13.1",
 		"zod": "^3.21.4"

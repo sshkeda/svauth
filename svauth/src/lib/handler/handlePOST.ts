@@ -1,3 +1,4 @@
+import type { Settings } from '$lib';
 import type { RequestEvent } from '@sveltejs/kit';
 import { z } from 'zod';
 
@@ -15,7 +16,7 @@ const postBodySchema = z
 		})
 	);
 
-const handlePOST = async (event: RequestEvent) => {
+const handlePOST = async (event: RequestEvent, settings: Settings) => {
 	const postBody = (await event.request.json()) as unknown;
 	const parsedBody = postBodySchema.safeParse(postBody);
 
@@ -24,6 +25,18 @@ const handlePOST = async (event: RequestEvent) => {
 	const { action } = parsedBody.data;
 
 	if (action === 'signOut') {
+		if (settings.adapter) {
+			const sessionCookie = event.cookies.get('SVAUTH_SESSION');
+			if (!sessionCookie) {
+				return new Response('No session cookie.', { status: 400 });
+			}
+
+			const deleted = await settings.adapter.deleteSession(sessionCookie, settings);
+
+			if (!deleted) {
+				return new Response('Could not delete session.', { status: 400 });
+			}
+		}
 		return new Response('Signed out.', {
 			headers: {
 				'Set-Cookie': 'SVAUTH_SESSION=; Path=/; Max-Age=0'

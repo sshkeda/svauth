@@ -5,19 +5,37 @@ import { json, text, type RequestEvent } from '@sveltejs/kit';
 import * as jose from 'jose';
 import { z } from 'zod';
 import crypto from 'crypto';
+import { createId } from '@paralleldrive/cuid2';
 
-const createSession = async (user: User, settings: Settings) => {
+const createSession = async (user: User, settings: Settings): Promise<SafeResult<string>> => {
 	const session = {
 		user
 	};
 
+	if (settings.adapter) {
+		const sessionId = await settings.adapter.createSession(user, settings);
+		if (!sessionId.ok) {
+			return {
+				ok: false,
+				error: 'Problem with creating session.'
+			};
+		}
+
+		return {
+			ok: true,
+			data: sessionId.data
+		};
+	}
 	const encodedToken = await new jose.EncryptJWT(session)
 		.setProtectedHeader({ alg: 'dir', enc: 'A256GCM' })
 		.setIssuedAt()
 		.setExpirationTime(settings.expires)
 		.encrypt(settings.secret);
 
-	return encodedToken;
+	return {
+		ok: true,
+		data: encodedToken
+	};
 };
 
 const exchangeAuthorizationCode = async (
@@ -84,7 +102,7 @@ const handleGET = async (event: RequestEvent, settings: Settings) => {
 	const action = eventPath.data[0];
 
 	if (action === 'session') {
-		const session = await getSession(event, settings.expires);
+		const session = await getSession(event, settings);
 		return json({
 			session
 		});
@@ -125,7 +143,8 @@ const handleGET = async (event: RequestEvent, settings: Settings) => {
 		});
 	}
 
-	let user: SafeResult<User>;
+	let accountUser: SafeResult<User>;
+	let config: OAuthProvider | undefined;
 
 	if (provider === 'token') {
 		const idToken = event.url.searchParams.get('token');
@@ -133,7 +152,7 @@ const handleGET = async (event: RequestEvent, settings: Settings) => {
 
 		if (!idToken || !providerId) return new Response('Missing parameters.', { status: 404 });
 
-		const config = settings.providers[providerId] as OAuthProvider | undefined;
+		config = settings.providers[providerId] as OAuthProvider | undefined;
 		if (!config) return new Response('Invalid provider.', { status: 404 });
 		if (!config.verifyToken || !config.parseUser)
 			return new Response('Provider does not support token verification.', { status: 404 });
@@ -141,9 +160,9 @@ const handleGET = async (event: RequestEvent, settings: Settings) => {
 		const jwt = await config.verifyToken(idToken);
 		if (!jwt.ok) return new Response(jwt.error, { status: 404 });
 
-		user = await config.parseUser(jwt.data);
+		accountUser = await config.parseUser(jwt.data);
 	} else {
-		const config = settings.providers[provider] as OAuthProvider | undefined;
+		config = settings.providers[provider] as OAuthProvider | undefined;
 		if (!config) return new Response('Invalid provider.', { status: 404 });
 
 		const authorizationCode = event.url.searchParams.get('code');
@@ -152,19 +171,31 @@ const handleGET = async (event: RequestEvent, settings: Settings) => {
 		const exchangeResponse = await exchangeAuthorizationCode(authorizationCode, config, settings);
 		if (!exchangeResponse.ok) return new Response(exchangeResponse.error, { status: 404 });
 
-		user = await config.getUser(exchangeResponse.data);
+		accountUser = await config.getUser(exchangeResponse.data);
 	}
 
-	if (!user.ok) return new Response(user.error, { status: 404 });
+	if (!accountUser.ok) return new Response(accountUser.error, { status: 404 });
 
-	const encodedSessionToken = await createSession(user.data, settings);
+	const user = accountUser.data;
 
-	const redirect = event.cookies.get('SVAUTH_SIGNIN_REDIRECT') || '/';
+	if (settings.adapter) {
+		const handledUser = await settings.adapter.handleAccount(accountUser.data, config);
+		if (!handledUser.ok) return new Response(handledUser.error, { status: 404 });
+		user.id = handledUser.data.id;
+	} else {
+		const cuid = createId();
+		user.id = cuid;
+	}
 
+	const encodedSessionToken = await createSession(user, settings);
+
+	if (!encodedSessionToken.ok) return new Response(encodedSessionToken.error, { status: 404 });
+
+	const redirect = event.cookies.get('SVAUTH_SIGNIN_REDIRECT') || `${base}/`;
 	const response = new Response('Signed in.', {
 		status: 301
 	});
-	response.headers.append('Set-Cookie', `SVAUTH_SESSION=${encodedSessionToken}; Path=/;`);
+	response.headers.append('Set-Cookie', `SVAUTH_SESSION=${encodedSessionToken.data}; Path=/;`);
 	response.headers.append('Set-Cookie', 'SVAUTH_SIGNIN_REDIRECT=; Path=/; Max-Age=0');
 	response.headers.append('Location', redirect);
 	return response;

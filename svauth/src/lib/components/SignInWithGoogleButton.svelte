@@ -2,13 +2,12 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { env } from '$env/dynamic/public';
-	import { BROWSER } from 'esm-env';
 
 	const prefix = env.PUBLIC_SVAUTH_PREFIX || '/auth';
 
 	let googleScript: HTMLScriptElement;
 
-	export let oneTap: boolean = false;
+	export let oneTap = false;
 
 	// https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/types/google-one-tap/index.d.ts
 	// https://developers.google.com/identity/gsi/web/reference/js-reference#GsiButtonConfiguration
@@ -34,7 +33,6 @@
 
 		const initializeGoogle = async () => {
 			const client_id = await fetch(`${prefix}/client_id/google`).then((res) => res.text());
-			console.log(client_id);
 
 			// @ts-ignore
 			google.accounts.id.initialize({
