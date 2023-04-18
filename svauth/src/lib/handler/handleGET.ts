@@ -96,7 +96,7 @@ const handleGET = async (event: RequestEvent, settings: Settings) => {
 	const eventPath = eventPathSchema.safeParse(eventPathArray);
 
 	if (!eventPath.success) {
-		return new Response('Invalid Svauth path.', { status: 404 });
+		return new Response('Invalid Svauth GET path.', { status: 404 });
 	}
 
 	const action = eventPath.data[0];
@@ -142,6 +142,8 @@ const handleGET = async (event: RequestEvent, settings: Settings) => {
 			}
 		});
 	}
+
+	// action === 'callback'
 
 	let accountUser: SafeResult<User>;
 	let config: OAuthProvider | undefined;

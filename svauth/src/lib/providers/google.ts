@@ -37,6 +37,7 @@ const Google = ({ clientId, clientSecret }: GoogleConfig): OAuthProvider => {
 		try {
 			const JWKS = jose.createRemoteJWKSet(new URL(jwksEndpoint));
 
+			console.log(idToken)
 			const decodedToken = await jose.jwtVerify(idToken, JWKS);
 
 			return {
@@ -44,6 +45,7 @@ const Google = ({ clientId, clientSecret }: GoogleConfig): OAuthProvider => {
 				data: decodedToken.payload
 			};
 		} catch (err) {
+			console.log(err);
 			return {
 				ok: false,
 				error: 'Failed to verify JWT token.'

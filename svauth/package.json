@@ -1,6 +1,6 @@
 {
 	"name": "svauth",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"license": "ISC",
 	"description": "Authentication for SvelteKit",
 	"homepage": "https://github.com/sshkeda/svauth",

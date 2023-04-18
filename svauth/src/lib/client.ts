@@ -12,7 +12,7 @@ export const signIn = async (
 	providerId: ProviderId,
 	redirectUrl: string = window.location.pathname
 ) => {
-	document.cookie = `SVAUTH_SIGNIN_REDIRECT=${redirectUrl}; path=/; max-age=360`;
+	document.cookie = `SVAUTH_SIGNIN_REDIRECT=${redirectUrl}; Path=/; Max-Age=360`;
 
 	(window as Window).location = `${prefix}/signin/${providerId}`;
 };

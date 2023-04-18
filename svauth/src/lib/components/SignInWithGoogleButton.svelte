@@ -28,7 +28,7 @@
 
 		const handleCredentialResponse = (response: CredentialResponse) => {
 			const token = response.credential;
-			goto('/auth/callback/token/?provider=google&token=' + token);
+			(window as Window).location = `${prefix}/callback/token?provider=google&token=${token}`;
 		};
 
 		const initializeGoogle = async () => {
